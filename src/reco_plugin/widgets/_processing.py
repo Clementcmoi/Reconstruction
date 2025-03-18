@@ -1,4 +1,325 @@
 from qtpy.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel
+import math
+from scipy.fft import fft2, ifft2, fftfreq, fftshift, ifftshift
+from numpy import pi
+import numpy as np
+import gc
+from joblib import Parallel, delayed
+from tqdm import tqdm
+from skimage.draw import disk
+import astra
+
+
+
+def keVtoLambda(energy_kev):
+    """
+    Convert energy in keV to wavelength in m.
+
+    Parameters
+    ----------
+    energy_kev : float
+        Energy in keV
+
+    Returns
+    -------
+    float
+        Wavelength in m
+    """
+    h = 6.58211928e-19  # keV.s
+    c = 299792458  # m/s
+    return h * c / (energy_kev * 1e3)
+
+def get_padding_size(image, energy, effective_pixel_size, distance):
+    """
+    Calculate the padding size for a 2D image.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        2D array of the image.
+    energy : float
+        Energy of the X-ray beam (keV).
+    effective_pixel_size : float
+        Effective pixel size of the detector (m).
+    distance : float
+        Distance between the object and the detector (m).
+
+    Returns
+    -------
+    n_margin : int
+        Padding size.
+    """
+    ny, nx = image.shape
+    wavelength = keVtoLambda(energy)
+
+    # Calculate the padding size
+    n_margin = math.ceil(3 * wavelength * distance / (2 * effective_pixel_size**2))
+    
+    nx_margin = nx + 2 * n_margin
+    ny_margin = ny + 2 * n_margin
+
+    nx_padded = int(np.exp((np.log(2) * np.ceil(np.log2(nx_margin)))))  # Next power of 2
+    ny_padded = int(np.exp((np.log(2) * np.ceil(np.log2(ny_margin)))))  # Next power of 2
+
+    return nx_padded, ny_padded
+
+def padding(image, energy, effective_pixel_size, distance):
+    """
+    Pad a 2D image to avoid edge artifacts during phase retrieval with the closest value.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        2D array of the image.
+    energy : float
+        Energy of the X-ray beam (keV).
+    effective_pixel_size : float
+        Effective pixel size of the detector (m).
+    distance : float
+        Distance between the object and the detector (m).
+
+    Returns
+    -------
+    padded_image : numpy.ndarray
+        Padded image.
+    """
+    ny, nx = image.shape
+    nx_padded, ny_padded = get_padding_size(image, energy, effective_pixel_size, distance)
+
+    top = (ny_padded - ny) // 2
+    bottom = ny_padded - ny - top
+    left = (nx_padded - nx) // 2
+    right = nx_padded - nx - left
+
+    return np.pad(image, ((top, bottom), (left, right)), mode='edge'), nx_padded, ny_padded
+
+def paganin_filter(sample_images, energy_kev, pixel_size, delta_beta, dist_object_detector, beta=1e-10):
+    """
+    Apply the Paganin filter to an image.
+
+    Parameters
+    ----------
+    sample_images : numpy.ndarray
+        Image to filter.
+    energy_kev : float
+        Energy of the X-ray beam (keV).
+    pixel_size : float
+        Effective pixel size of the detector (m).
+    delta_beta : float
+        Delta over beta value.
+    dist_object_detector : float
+        Distance between the object and the detector (m).
+    beta : float
+        Beta value for phase retrieval.
+
+    Returns
+    -------
+    img_thickness : numpy.ndarray
+        Filtered image.
+    """
+    lambda_energy = keVtoLambda(energy_kev)
+    pix_size = keVtoLambda(pixel_size)
+
+    waveNumber = 2 * pi / lambda_energy
+
+    mu = 2 * beta * waveNumber
+
+    fftNum = fftshift(fft2(sample_images))
+    Nx, Ny = fftNum.shape
+
+    u = fftfreq(Nx, d=pix_size)
+    v = fftfreq(Ny, d=pix_size)
+
+    u, v = np.meshgrid(np.arange(0,Nx), np.arange(0,Ny))
+    u = u - (Nx/2)
+    v = v - (Ny/2)
+    u_m = u / (Nx * pix_size) 
+    v_m = v / (Ny * pix_size)
+    uv_sqrd = np.transpose(u_m**2 + v_m**2)
+
+    denominator = 1 + pi * delta_beta * dist_object_detector * lambda_energy * uv_sqrd
+    denominator[denominator == 0] = np.finfo(float).eps
+
+    tmpThickness = ifft2(ifftshift(fftNum / denominator))
+    img_thickness = np.real(tmpThickness)
+    img_thickness[img_thickness <= 0] = 0.000000000001
+
+    return (-np.log(img_thickness) / mu) * 1e6
+
+def process_projection(proj, nx, ny, energy, effective_pixel_size, distance, beta, delta, pixel_size):
+        """
+        Process a single projection image.
+
+        Parameters
+        ----------
+        proj : numpy.ndarray
+            Projection image.
+        nx : int
+            Width of the image.
+        ny : int
+            Height of the image.
+        white : numpy.ndarray
+            Whitefield image.
+        dark : numpy.ndarray
+            Darkfield image.
+        energy : float
+            Energy of the X-ray beam (keV).
+        effective_pixel_size : float
+            Effective pixel size of the detector (m).
+        distance : float
+            Distance between the object and the detector (m).
+        beta : float
+            Beta value for phase retrieval.
+        delta : float
+            Delta value for phase retrieval.
+        pixel_size : float
+            Detector pixel size (m).
+
+        Returns
+        -------
+        numpy.ndarray
+            Processed image.
+        """
+        padded_proj, ny_padded, nx_padded = padding(proj, energy, effective_pixel_size, distance)
+        retrieved_proj = paganin_filter(padded_proj, energy, pixel_size, delta/beta, distance, beta)
+        x_margin = abs(nx_padded - nx) // 2
+        y_margin = abs(ny_padded - ny) // 2
+
+        return retrieved_proj[x_margin:x_margin+nx, y_margin:y_margin+ny]
+
+def double_flatfield_correction(projs):
+    """
+    Apply double flat-field correction to an image.
+
+    Parameters
+    ----------
+    proj : 2D numpy array
+        Image to correct
+
+    Returns
+    -------
+    I_corr : 2D numpy array
+        Corrected image
+
+    """
+    mean_proj = np.mean(projs, axis=0)
+
+    mean_proj[mean_proj == 0] = 1e-6
+
+    I_corr = projs / mean_proj
+
+    return I_corr
+
+def linear_weighting(width):
+    """Linear weight from 0 to 1"""
+    x = np.linspace(0, 1, width)
+    return x
+
+def apply_left_weighting(projs, CoR):
+    """
+    Apply weighting to the left part of the projections.
+    """
+    theta, nx, ny = projs.shape
+    
+    weights = linear_weighting(CoR)
+    weights_3d = np.tile(weights, (theta, nx, 1))
+
+    projs_weighted = np.copy(projs)
+    projs_weighted[:, :, :CoR] *= weights_3d
+
+    return projs_weighted
+
+
+def normalization_min_max(vol):
+    return(vol - np.min(vol)) / (np.max(vol) - np.min(vol))
+
+def create_sinogram_slice(projs, CoR, slice_idx):
+    """
+    Create a sinogram from a set of projections.
+    """
+    theta, nx, ny = projs.shape
+
+    sino = np.zeros((theta//2, 2 * ny - CoR))
+
+    flip = projs[:theta // 2, slice_idx, ::-1]  # np.flip optimisé
+    
+    sino[:, :ny] += flip
+    sino[:,  -ny:] += projs[theta//2:, slice_idx, :]
+
+    return sino
+
+def create_sinogram(projs, CoR):
+    """
+    Create sinograms from a set of projections.
+    """
+    temp = normalization_min_max(projs)
+
+    projs_weighted = apply_left_weighting(temp, CoR)
+
+    del temp
+    gc.collect()
+
+    sinos = np.array(
+        Parallel(n_jobs=-1, backend='threading')(
+            delayed(create_sinogram_slice)(projs_weighted, CoR, slice_idx)
+            for slice_idx in tqdm(range(projs.shape[1]), desc='Creating sinograms')
+        )
+    )
+    return sinos
+
+def from_degress_to_radians(angles):
+    return angles * pi / 180
+
+def from_radians_to_degrees(angles):
+    return angles * 180 / pi
+
+def create_angles(sinogram):
+    return np.linspace(0, pi, sinogram.shape[1], endpoint=False)
+
+def reconstruct_from_sinogram_slice(sinogram, angles):
+    """
+    Reconstruct a 2D image from a sinogram using FBP_CUDA algorithm from ASTRA Toolbox.
+
+    Parameters:
+    - sinogram: 2D numpy array (angles, detectors) containing the sinogram.
+    - angles: 1D numpy array of rotation angles (in radians).
+
+    Returns:
+    - reconstruction: 2D numpy array representing the reconstructed image.
+    """
+
+    # Définition des géométries de projection et du volume
+    proj_geom = astra.create_proj_geom('parallel', 1.0, sinogram.shape[1], angles)
+    vol_geom = astra.create_vol_geom(sinogram.shape[1], sinogram.shape[1])
+
+    # Création des objets de données pour le sinogramme et la reconstruction
+    sinogram_id = astra.data2d.create('-sino', proj_geom, sinogram)
+    rec_id = astra.data2d.create('-vol', vol_geom)
+
+    # Configuration et exécution de l'algorithme FBP_CUDA
+    cfg = astra.astra_dict('FBP_CUDA')
+    cfg['ReconstructionDataId'] = rec_id
+    cfg['ProjectionDataId'] = sinogram_id
+
+    alg_id = astra.algorithm.create(cfg)
+    astra.algorithm.run(alg_id)
+
+    # Récupération et retour de la reconstruction
+    reconstruction = astra.data2d.get(rec_id)
+
+    # Libération des ressources ASTRA
+    astra.algorithm.delete(alg_id)
+    astra.data2d.delete(rec_id)
+    astra.data2d.delete(sinogram_id)
+
+    return reconstruction
+
+def create_disk_mask(sinogram):
+    disk_mask = np.zeros((sinogram.shape[2], sinogram.shape[2]))
+    rr, cc = disk((sinogram.shape[2]//2, sinogram.shape[2]//2), sinogram.shape[2] // 2)
+    disk_mask[rr, cc] = 1
+
+    return disk_mask
 
 def create_processing_dialog(parent, message="Processing..."):
     """
@@ -24,11 +345,11 @@ def apply_corrections(viewer, experiment):
     sample_layer = viewer.layers[experiment.sample_images].data
 
     if experiment.darkfield is not None:
-        darkfield_layer = viewer.layers[experiment.darkfield].data
+        darkfield_layer = np.mean(viewer.layers[experiment.darkfield].data)
         sample_layer = sample_layer - darkfield_layer
 
     if experiment.flatfield is not None:
-        flatfield_layer = viewer.layers[experiment.flatfield].data
+        flatfield_layer = np.mean(viewer.layers[experiment.flatfield].data)
         sample_layer = sample_layer / flatfield_layer
 
     return sample_layer
@@ -41,7 +362,84 @@ def add_image_to_layer(results, method, viewer):
         viewer.add_image(image.real, name=f"{name}_{method}")
 
 def process_one_slice(experiment, viewer):
-    pass
+
+    processing_dialog = create_processing_dialog(viewer.window.qt_viewer)
+
+    try:
+        sample_layer = apply_corrections(viewer, experiment)
+
+        theta, nx, ny = sample_layer.shape
+
+        energy = experiment.energy
+        pixel_size = experiment.pixel
+        delta = experiment.delta
+        beta = experiment.beta
+        effective_pixel_size = experiment.effective_pixel
+        dist_object_detector = experiment.dist_object_detector
+
+        projs = np.array(Parallel(n_jobs=-1, backend='threading')(
+            delayed(process_projection)(proj, nx, ny, energy, pixel_size, dist_object_detector, beta, delta, effective_pixel_size) 
+            for proj in tqdm(sample_layer, desc='Processing Paganin filter')))
+        
+        if experiment.double_flatfield:
+            print("Applying double flatfield correction")
+            projs = double_flatfield_correction(projs)
+
+        CoR = round(experiment.center_of_rotation)
+
+        print("Creating sinogram")
+        sinogram = create_sinogram(projs, CoR)
+        angles = create_angles(sinogram)
+
+        slice_idx = experiment.slice_idx
+
+        print("Reconstructing slice")
+        reconstruction = reconstruct_from_sinogram_slice(sinogram[slice_idx], angles)
+
+        add_image_to_layer({"Reconstruction": reconstruction}, "FBP", viewer)
+
+    except Exception as e:
+        print(f"Error processing slice: {e}")
+
+    finally:
+        processing_dialog.close()
+
+    
 
 def process_all_slices(experiment, viewer):
-    pass
+    processing_dialog = create_processing_dialog(viewer.window.qt_viewer)
+
+    try:
+        sample_layer = apply_corrections(viewer, experiment)
+
+        theta, nx, ny = sample_layer.shape
+
+        energy = experiment.energy
+        pixel_size = experiment.pixel
+        delta = experiment.delta
+        beta = experiment.beta
+        effective_pixel_size = experiment.effective_pixel
+        dist_object_detector = experiment.dist_object_detector
+
+        projs = np.array(Parallel(n_jobs=-1, backend='threading')(
+            delayed(process_projection)(proj, nx, ny, energy, pixel_size, dist_object_detector, beta, delta, effective_pixel_size) 
+            for proj in tqdm(sample_layer, desc='Processing Paganin filter')))
+        
+        if experiment.double_flatfield:
+            print("Applying double flatfield correction")
+            projs = double_flatfield_correction(projs)
+
+        CoR = round(experiment.center_of_rotation)
+
+        print("Creating sinogram")
+        sinogram = create_sinogram(projs, CoR)
+        angles = create_angles(sinogram)
+
+        disk_mask = create_disk_mask(sinogram)
+
+        reconstruction = np.zeros((sinogram.shape[0], sinogram.shape[2], sinogram.shape[2]))
+        print("Reconstructing slices")
+        for i in tqdm(range(sinogram.shape[0])):
+            reconstruction[i] = reconstruct_from_sinogram_slice(sinogram[i], angles) * disk_mask
+
+        add_image_to_layer({"Reconstruction": reconstruction}, "FBP", viewer)

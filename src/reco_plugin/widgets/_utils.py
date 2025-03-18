@@ -34,11 +34,14 @@ class Experiment:
         self.settings = QSettings("Reco", "recoconfig")
 
         self.sample_images = None
+        self.slice_idx = None
+
         self.darkfield = None
         self.flatfield = None
 
         self.energy = None
         self.pixel = None
+        self.effective_pixel = None
         self.delta = None
         self.beta = None
         self.dist_object_detector = None    
@@ -69,12 +72,14 @@ class Experiment:
         print(f"Updating Parameters")
         try:
             self.sample_images = widget.sample_selection.currentText()
+            self.slice_idx = int(widget.slice_selector.value())
 
             self.darkfield = widget.darkfield_selection.currentText() if widget.darkfield_checkbox.isChecked() else None
             self.flatfield = widget.flatfield_selection.currentText() if widget.flatfield_checkbox.isChecked() else None
 
             self.energy = float(widget.energy_input.text())
             self.pixel = float(widget.pixel_size_input.text())
+            self.effective_pixel = float(widget.effective_pixel_size_input.text())
             self.delta = float(widget.delta_input.text())
             self.beta = float(widget.beta_input.text())
             self.dist_object_detector = float(widget.distance_object_detector_input.text())           

@@ -134,10 +134,20 @@ def add_pixel_size_layout(widget):
     layout = QHBoxLayout()
 
 
-    layout.addWidget(QLabel("Pixel size (um):"))
+    layout.addWidget(QLabel("Pixel size (m):"))
     widget.pixel_size_input = QLineEdit()
     widget.pixel_size_input.setText(str(widget.experiment.pixel) if widget.experiment.pixel is not None else "")
     layout.addWidget(widget.pixel_size_input)
+
+    widget.variables_layout.addLayout(layout)
+
+def add_effective_pixel_size_layout(widget):
+    layout = QHBoxLayout()
+
+    layout.addWidget(QLabel("Effective pixel size (m):"))
+    widget.effective_pixel_size_input = QLineEdit()
+    widget.effective_pixel_size_input.setText(str(widget.experiment.effective_pixel) if widget.experiment.effective_pixel is not None else "")
+    layout.addWidget(widget.effective_pixel_size_input)
 
     widget.variables_layout.addLayout(layout)
 
@@ -182,9 +192,9 @@ def add_paganin_section(widget):
     # Add title for Paganin Parameters
     widget.variables_layout.addWidget(QLabel("Paganin Parameters"))
 
-    # Always add the Paganin parameters
     add_energy_layout(widget)
     add_pixel_size_layout(widget)
+    add_effective_pixel_size_layout(widget)
     add_delta_and_beta_layout(widget)
     add_distance_object_detector_layout(widget)
 
@@ -208,6 +218,7 @@ def add_center_of_rotation_section(widget):
 
     layout.addWidget(QLabel("Center of rotation:"))
     widget.center_of_rotation_input = QLineEdit()
+    widget.center_of_rotation_input.setText(str(widget.experiment.center_of_rotation) if widget.experiment.center_of_rotation is not None else "")
     layout.addWidget(widget.center_of_rotation_input)
 
     widget.layout().addLayout(layout)
