@@ -10,4 +10,3 @@ contributions:
   widgets:
     - command: reco-plugin.reconstruction
       display_name: Reconstruction
-      autogenerate: true

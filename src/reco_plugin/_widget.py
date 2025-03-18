@@ -1,11 +1,21 @@
 from typing import TYPE_CHECKING
+from PyQt5.QtCore import Qt
 from qtpy.QtWidgets import (
+    QLabel, 
+    QLineEdit, 
+    QPushButton, 
+    QVBoxLayout, 
+    QHBoxLayout, 
     QWidget,
-    QVBoxLayout,
-    QLabel,
-    QSpacerItem,
+    QComboBox, 
+    QCheckBox,
+    QSpacerItem, 
     QSizePolicy,
+    QInputDialog
 )
+
+from .widgets._section import *
+from .widgets._utils import LayerUtils, Experiment
 
 if TYPE_CHECKING:
     import napari
@@ -14,35 +24,25 @@ class ReconstructionWidget(QWidget):
     def __init__(self, napari_viewer: 'napari.Viewer'):
         super().__init__()
         self.viewer = napari_viewer
+        self.experiment = Experiment()
         self.setup_ui()
-        self.connect_signals()
-
-    def connect_signals(widget):
-        """
-        Connect signals for layer updates.
-        """
-        widget.viewer.layers.events.inserted.connect(lambda event: self.update_layer_selections(widget, event))
-        widget.viewer.layers.events.removed.connect(lambda event: self.update_layer_selections(widget, event))
-        widget.viewer.layers.events.changed.connect(lambda event: self.update_layer_selections(widget, event))
-        widget.viewer.layers.events.reordered.connect(lambda event: self.update_layer_selections(widget, event))
-
-    def update_layer_selections(widget, event=None):
-        """
-        Update the QComboBox selections with the list of layers.
-        """
-        layers = [layer.name for layer in widget.viewer.layers]
-        for combobox in [widget.sample_selection]:
-            combobox.clear()
-            combobox.addItems(layers)
-
-        if hasattr(widget, 'darkfield_checkbox') and widget.darkfield_checkbox.isChecked() and widget.darkfield_selection:
-            widget.darkfield_selection.clear()
-            widget.darkfield_selection.addItems(layers)
-        
-        if hasattr(widget, 'flatfield_checkbox') and widget.flatfield_checkbox.isChecked() and widget.flatfield_selection:
-            widget.flatfield_selection.clear()
-            widget.flatfield_selection.addItems(layers) 
+        LayerUtils.connect_signals(self) 
 
     def setup_ui(self):
         self.setLayout(QVBoxLayout())
-        self.layout().addWidget(QLabel("LCS Processing"))
+        self.layout().addWidget(QLabel("Reconstruction"))
+
+        add_layer_and_slice_selection_section(self)
+        add_darkfield_section(self)
+        add_flatfield_section(self)
+
+        add_paganin_section(self)
+
+        add_double_flatfield_section(self)
+
+        add_process_section(self)
+
+        LayerUtils.update_layer_selections(self)
+        self.layout().addSpacerItem(
+            QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        )

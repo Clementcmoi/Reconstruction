@@ -11,3 +11,4 @@ src/reco_plugin.egg-info/dependency_links.txt
 src/reco_plugin.egg-info/entry_points.txt
 src/reco_plugin.egg-info/requires.txt
 src/reco_plugin.egg-info/top_level.txt
+src/reco_plugin/widgets/_section.py
