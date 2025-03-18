@@ -40,6 +40,8 @@ class ReconstructionWidget(QWidget):
 
         add_double_flatfield_section(self)
 
+        add_center_of_rotation_section(self)
+
         add_process_section(self)
 
         LayerUtils.update_layer_selections(self)

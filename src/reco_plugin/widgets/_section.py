@@ -50,12 +50,16 @@ def toggle_field_widgets(widget, checked, layout, label_attr, selection_attr, la
     if checked == Qt.Checked:
         if not getattr(widget, label_attr):
             setattr(widget, label_attr, QLabel(label_text))
-            layout.addWidget(getattr(widget, label_attr))
         if not getattr(widget, selection_attr):
             combobox = QComboBox()
             combobox.addItems([layer.name for layer in widget.viewer.layers])
             setattr(widget, selection_attr, combobox)
-            layout.addWidget(combobox)
+        
+        # Create a horizontal layout to put label and selection on the same line
+        horizontal_layout = QHBoxLayout()
+        horizontal_layout.addWidget(getattr(widget, label_attr))
+        horizontal_layout.addWidget(getattr(widget, selection_attr))
+        layout.addLayout(horizontal_layout)
     else:
         widget_label = getattr(widget, label_attr)
         widget_selection = getattr(widget, selection_attr)
@@ -117,34 +121,51 @@ def ensure_variables_layout(widget):
         widget.layout().addLayout(widget.variables_layout)
 
 def add_energy_layout(widget):
-    widget.variables_layout.addWidget(QLabel("Energy:"))
+    layout = QHBoxLayout()
+
+    layout.addWidget(QLabel("Energy (keV):"))
     widget.energy_input = QLineEdit()
     widget.energy_input.setText(str(widget.experiment.energy) if widget.experiment.energy is not None else "")
-    widget.variables_layout.addWidget(widget.energy_input)
+    layout.addWidget(widget.energy_input)
+
+    widget.variables_layout.addLayout(layout)
 
 def add_pixel_size_layout(widget):
-    widget.variables_layout.addWidget(QLabel("Pixel size (nm):"))
+    layout = QHBoxLayout()
+
+
+    layout.addWidget(QLabel("Pixel size (nm):"))
     widget.pixel_size_input = QLineEdit()
     widget.pixel_size_input.setText(str(widget.experiment.pixel) if widget.experiment.pixel is not None else "")
-    widget.variables_layout.addWidget(widget.pixel_size_input)
+    layout.addWidget(widget.pixel_size_input)
 
-def add_delta_layout(widget):
-    widget.variables_layout.addWidget(QLabel("Delta:"))
+    widget.variables_layout.addLayout(layout)
+
+def add_delta_and_beta_layout(widget):
+    layout = QHBoxLayout()
+    
+    layout.addWidget(QLabel("Delta:"))
     widget.delta_input = QLineEdit()
     widget.delta_input.setText(str(widget.experiment.delta) if widget.experiment.delta is not None else "")
-    widget.variables_layout.addWidget(widget.delta_input)
-
-def add_beta_layout(widget):
-    widget.variables_layout.addWidget(QLabel("Beta:"))
+    layout.addWidget(widget.delta_input)
+    
+    layout.addWidget(QLabel("Beta:"))
     widget.beta_input = QLineEdit()
     widget.beta_input.setText(str(widget.experiment.beta) if widget.experiment.beta is not None else "")
-    widget.variables_layout.addWidget(widget.beta_input)
+    layout.addWidget(widget.beta_input)
+    
+    widget.variables_layout.addLayout(layout)
 
 def add_distance_object_detector_layout(widget):
-    widget.variables_layout.addWidget(QLabel("Distance object-detector (mm):"))
+
+    layout = QHBoxLayout()
+
+    layout.addWidget(QLabel("Distance object-detector (mm):"))
     widget.distance_object_detector_input = QLineEdit()
     widget.distance_object_detector_input.setText(str(widget.experiment.dist_object_detector) if widget.experiment.dist_object_detector is not None else "")
-    widget.variables_layout.addWidget(widget.distance_object_detector_input)
+    layout.addWidget(widget.distance_object_detector_input)
+
+    widget.variables_layout.addLayout(layout)
 
 def update_parameters(widget):
     """
@@ -158,13 +179,14 @@ def add_paganin_section(widget):
     """
     ensure_variables_layout(widget)  # Ensure variables_layout exists
 
+    # Add title for Paganin Parameters
+    widget.variables_layout.addWidget(QLabel("Paganin Parameters"))
+
     # Always add the Paganin parameters
     add_energy_layout(widget)
     add_pixel_size_layout(widget)
-    add_delta_layout(widget)
-    add_beta_layout(widget)
+    add_delta_and_beta_layout(widget)
     add_distance_object_detector_layout(widget)
-
 
 def add_double_flatfield_section(widget):
     """
@@ -177,6 +199,18 @@ def add_double_flatfield_section(widget):
     checkbox_layout.addWidget(widget.double_flatfield_checkbox)
 
     widget.layout().addLayout(checkbox_layout)
+
+def add_center_of_rotation_section(widget):
+    """
+    Ajoute un champ pour entrer la valeur du centre de rotation.
+    """
+    layout = QHBoxLayout()
+
+    layout.addWidget(QLabel("Center of rotation:"))
+    widget.center_of_rotation_input = QLineEdit()
+    layout.addWidget(widget.center_of_rotation_input)
+
+    widget.layout().addLayout(layout)
 
 def add_process_section(widget):
     """
