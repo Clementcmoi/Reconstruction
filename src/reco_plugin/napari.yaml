@@ -7,6 +7,16 @@ contributions:
     - id: reco-plugin.reconstruction
       python_name: reco_plugin._widget:ReconstructionWidget
       title: Reconstruction
+
+    - id: reco-plugin.get_reader
+      python_name: reco_plugin._reader:napari_get_reader
+      title: Read NXS Files
+
   widgets:
     - command: reco-plugin.reconstruction
       display_name: Reconstruction
+
+  readers:
+    - command: reco-plugin.get_reader
+      filename_patterns: ["*.nxs"]
+      accepts_directories: false

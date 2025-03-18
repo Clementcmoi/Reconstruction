@@ -43,6 +43,10 @@ class Experiment:
         self.beta = None
         self.dist_object_detector = None    
 
+        self.double_flatfield = None
+
+        self.center_of_rotation = None
+
         self.load_settings()
     
     def load_settings(self):
@@ -74,6 +78,8 @@ class Experiment:
             self.delta = float(widget.delta_input.text())
             self.beta = float(widget.beta_input.text())
             self.dist_object_detector = float(widget.distance_object_detector_input.text())           
+            self.double_flatfield = widget.double_flatfield_checkbox.isChecked()
+            self.center_of_rotation = float(widget.center_of_rotation_input.text())
 
             self.save_settings()
 

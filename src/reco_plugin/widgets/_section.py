@@ -134,7 +134,7 @@ def add_pixel_size_layout(widget):
     layout = QHBoxLayout()
 
 
-    layout.addWidget(QLabel("Pixel size (nm):"))
+    layout.addWidget(QLabel("Pixel size (um):"))
     widget.pixel_size_input = QLineEdit()
     widget.pixel_size_input.setText(str(widget.experiment.pixel) if widget.experiment.pixel is not None else "")
     layout.addWidget(widget.pixel_size_input)
@@ -160,7 +160,7 @@ def add_distance_object_detector_layout(widget):
 
     layout = QHBoxLayout()
 
-    layout.addWidget(QLabel("Distance object-detector (mm):"))
+    layout.addWidget(QLabel("Distance object-detector (m):"))
     widget.distance_object_detector_input = QLineEdit()
     widget.distance_object_detector_input.setText(str(widget.experiment.dist_object_detector) if widget.experiment.dist_object_detector is not None else "")
     layout.addWidget(widget.distance_object_detector_input)
