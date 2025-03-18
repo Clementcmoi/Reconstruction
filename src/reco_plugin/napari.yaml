@@ -1,0 +1,13 @@
+name: reco-plugin
+display_name: Reconstruction Plugin
+visibility: public
+category: ["Image Processing"]
+contributions:
+  commands:
+    - id: reco-plugin.reconstruction
+      python_name: reco_plugin._widget:ReconstructionWidget
+      title: Reconstruction
+  widgets:
+    - command: reco-plugin.reconstruction
+      display_name: Reconstruction
+      autogenerate: true

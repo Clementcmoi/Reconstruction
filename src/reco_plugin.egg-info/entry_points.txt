@@ -1,0 +1,2 @@
+[napari.manifest]
+reco-plugin = reco_plugin:napari.yaml

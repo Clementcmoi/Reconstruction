@@ -1,0 +1,38 @@
+[project]
+name="reco-plugin"
+dynamic = ["version"]
+description = "A plugin for Reconstruction"
+readme = "README.md"
+
+authors = [{"name" = "Clément Capdeville", "email" = "clement.capdeville@univ-lyon1.fr"}]
+
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Framework :: Napari",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.9",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "h5py",
+    "numpy==1.26.4",
+    "pandas",
+    "scipy",
+    "tqdm",
+    "joblib",
+    "napari",
+    "scikit-image",
+    "astra-toolbox",
+]
+
+[project.entry-points."napari.manifest"]
+reco-plugin = "reco_plugin:napari.yaml"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.urls]
+Documentation = "https://github.com/Clementcmoi/Reconstruction"

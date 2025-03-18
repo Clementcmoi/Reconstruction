@@ -1,0 +1,25 @@
+Metadata-Version: 2.2
+Name: reco-plugin
+Version: 0.0.0
+Summary: A plugin for Reconstruction
+Author-email: Clément Capdeville <clement.capdeville@univ-lyon1.fr>
+Project-URL: Documentation, https://github.com/Clementcmoi/Reconstruction
+Classifier: Development Status :: 2 - Pre-Alpha
+Classifier: Framework :: Napari
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Topic :: Scientific/Engineering :: Image Processing
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: h5py==3.12.1
+Requires-Dist: numpy==1.26.4
+Requires-Dist: pandas==2.2.3
+Requires-Dist: scipy==1.14.1
+Requires-Dist: tqdm==4.67.1
+Requires-Dist: joblib==1.4.2
+Requires-Dist: napari==0.5.4
+Requires-Dist: scikit-image==0.24.0
+Requires-Dist: astra-toolbox
+
+todo
