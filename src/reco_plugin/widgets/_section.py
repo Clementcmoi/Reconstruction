@@ -10,7 +10,7 @@ from qtpy.QtWidgets import (
     QPushButton
 )
 
-from ._processing import process_one_slice, process_all_slices
+from ._processing import process_try_paganin, process_all_slices
 
 def add_layer_and_slice_selection_section(widget):
         """
@@ -18,21 +18,18 @@ def add_layer_and_slice_selection_section(widget):
         """
         layout = QHBoxLayout()
 
-        # ✅ Menu déroulant pour choisir l'échantillon
         layout.addWidget(QLabel("Select sample:"))
         widget.sample_selection = QComboBox()
         layout.addWidget(widget.sample_selection)
 
-        # ✅ Ajout d'un `QSpinBox` pour sélectionner le slice
-        layout.addWidget(QLabel("Slice:"))
+        layout.addWidget(QLabel("Radio:"))
         widget.slice_selector = QSpinBox()
-        widget.slice_selector.setMinimum(0)  # ✅ Valeur min
-        widget.slice_selector.setMaximum(1000)  # ✅ Valeur max temporaire (mis à jour dynamiquement)
+        widget.slice_selector.setMinimum(0) 
+        widget.slice_selector.setMaximum(1000) 
         layout.addWidget(widget.slice_selector)
 
-        widget.layout().addLayout(layout)  # ✅ Ajoute cette ligne au layout principal
+        widget.layout().addLayout(layout) 
 
-        # ✅ Mettre à jour la plage du slice quand une couche est sélectionnée
         widget.sample_selection.currentIndexChanged.connect(lambda: update_slice_range(widget))
 
 def update_slice_range(widget):
@@ -43,7 +40,7 @@ def update_slice_range(widget):
     if (selected_layer_name in widget.viewer.layers):
         selected_layer = widget.viewer.layers[selected_layer_name]
         if hasattr(selected_layer, 'data'):
-            max_slices = selected_layer.data.shape[0] - 1  # ✅ Taille de la première dimension
+            max_slices = selected_layer.data.shape[0] - 1
             widget.slice_selector.setMaximum(max_slices)
 
 def toggle_field_widgets(widget, checked, layout, label_attr, selection_attr, label_text):
@@ -55,7 +52,6 @@ def toggle_field_widgets(widget, checked, layout, label_attr, selection_attr, la
             combobox.addItems([layer.name for layer in widget.viewer.layers])
             setattr(widget, selection_attr, combobox)
         
-        # Create a horizontal layout to put label and selection on the same line
         horizontal_layout = QHBoxLayout()
         horizontal_layout.addWidget(getattr(widget, label_attr))
         horizontal_layout.addWidget(getattr(widget, selection_attr))
@@ -187,9 +183,8 @@ def add_paganin_section(widget):
     """
     Add Paganin-related UI components.
     """
-    ensure_variables_layout(widget)  # Ensure variables_layout exists
+    ensure_variables_layout(widget)
 
-    # Add title for Paganin Parameters
     widget.variables_layout.addWidget(QLabel("Paganin Parameters"))
 
     add_energy_layout(widget)
@@ -210,18 +205,39 @@ def add_double_flatfield_section(widget):
 
     widget.layout().addLayout(checkbox_layout)
 
-def add_center_of_rotation_section(widget):
+def add_half_acquisition_section(widget):
     """
-    Ajoute un champ pour entrer la valeur du centre de rotation.
+    Ajoute une case à cocher pour activer/désactiver la demi-acquisition.
     """
-    layout = QHBoxLayout()
+    checkbox_layout = QHBoxLayout()
+    checkbox_layout.addWidget(QLabel("Half acquisition:"))
+    
+    widget.half_acquisition_checkbox = QCheckBox()
+    widget.half_acquisition_checkbox.stateChanged.connect(lambda state: toggle_center_of_rotation(widget, state))
+    checkbox_layout.addWidget(widget.half_acquisition_checkbox)
 
-    layout.addWidget(QLabel("Center of rotation:"))
+    widget.layout().addLayout(checkbox_layout)
+
+    widget.center_of_rotation_layout = QHBoxLayout()
+    widget.center_of_rotation_label = QLabel("Center of rotation:")
     widget.center_of_rotation_input = QLineEdit()
     widget.center_of_rotation_input.setText(str(widget.experiment.center_of_rotation) if widget.experiment.center_of_rotation is not None else "")
-    layout.addWidget(widget.center_of_rotation_input)
+    widget.center_of_rotation_label.hide()
+    widget.center_of_rotation_input.hide()
+    widget.center_of_rotation_layout.addWidget(widget.center_of_rotation_label)
+    widget.center_of_rotation_layout.addWidget(widget.center_of_rotation_input)
+    widget.layout().addLayout(widget.center_of_rotation_layout)
 
-    widget.layout().addLayout(layout)
+def toggle_center_of_rotation(widget, checked):
+    """
+    Toggle the center of rotation input field.
+    """
+    if checked == Qt.Checked:
+        widget.center_of_rotation_label.show()
+        widget.center_of_rotation_input.show()
+    else:
+        widget.center_of_rotation_label.hide()
+        widget.center_of_rotation_input.hide()
 
 def add_process_section(widget):
     """
@@ -230,7 +246,7 @@ def add_process_section(widget):
 
     process_layout = QHBoxLayout()
 
-    widget.process_slice_button = QPushButton("Process slice")
+    widget.process_slice_button = QPushButton("Try Paganin")
     widget.process_slice_button.clicked.connect(lambda: process_slice(widget))
     process_layout.addWidget(widget.process_slice_button)
 
@@ -246,7 +262,7 @@ def process_slice(widget):
     """
     print("Processing slice")
     widget.experiment.update_parameters(widget)
-    result = process_one_slice(widget.experiment, widget.viewer)
+    result = process_try_paganin(widget.experiment, widget.viewer)
 
 def process_all(widget):
     """

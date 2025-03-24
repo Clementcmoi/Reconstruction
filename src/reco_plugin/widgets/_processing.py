@@ -27,7 +27,7 @@ def keVtoLambda(energy_kev):
     """
     h = 6.58211928e-19  # keV.s
     c = 299792458  # m/s
-    return h * c / (energy_kev * 1e3)
+    return h * c / (energy_kev)
 
 def get_padding_size(image, energy, effective_pixel_size, distance):
     """
@@ -58,8 +58,8 @@ def get_padding_size(image, energy, effective_pixel_size, distance):
     nx_margin = nx + 2 * n_margin
     ny_margin = ny + 2 * n_margin
 
-    nx_padded = int(np.exp((np.log(2) * np.ceil(np.log2(nx_margin)))))  # Next power of 2
-    ny_padded = int(np.exp((np.log(2) * np.ceil(np.log2(ny_margin)))))  # Next power of 2
+    nx_padded = 2 ** math.ceil(math.log2(nx_margin))
+    ny_padded = 2 ** math.ceil(math.log2(ny_margin))
 
     return nx_padded, ny_padded
 
@@ -83,6 +83,7 @@ def padding(image, energy, effective_pixel_size, distance):
     padded_image : numpy.ndarray
         Padded image.
     """
+    
     ny, nx = image.shape
     nx_padded, ny_padded = get_padding_size(image, energy, effective_pixel_size, distance)
 
@@ -91,7 +92,7 @@ def padding(image, energy, effective_pixel_size, distance):
     left = (nx_padded - nx) // 2
     right = nx_padded - nx - left
 
-    return np.pad(image, ((top, bottom), (left, right)), mode='edge'), nx_padded, ny_padded
+    return np.pad(image, ((top, bottom), (left, right)), mode='reflect'), nx_padded, ny_padded
 
 def paganin_filter(sample_images, energy_kev, pixel_size, delta_beta, dist_object_detector, beta=1e-10):
     """
@@ -118,7 +119,7 @@ def paganin_filter(sample_images, energy_kev, pixel_size, delta_beta, dist_objec
         Filtered image.
     """
     lambda_energy = keVtoLambda(energy_kev)
-    pix_size = keVtoLambda(pixel_size)
+    pix_size = pixel_size
 
     waveNumber = 2 * pi / lambda_energy
 
@@ -210,34 +211,21 @@ def double_flatfield_correction(projs):
 
     return I_corr
 
-def linear_weighting(width):
-    """Linear weight from 0 to 1"""
-    x = np.linspace(0, 1, width)
-    return x
-
 def apply_left_weighting(projs, CoR):
     """
-    Apply weighting to the left part of the projections.
+    Applique un poids linéaire sur la partie gauche des projections.
     """
-    theta, nx, ny = projs.shape
-    
-    weights = linear_weighting(CoR)
-    weights_3d = np.tile(weights, (theta, nx, 1))
+    weights = np.linspace(0, 1, CoR)[None, None, :]
+    projs[:, :, :CoR] *= weights
 
-    projs_weighted = np.copy(projs)
-    projs_weighted[:, :, :CoR] *= weights_3d
-
-    return projs_weighted
-
-
-def normalization_min_max(vol):
-    return(vol - np.min(vol)) / (np.max(vol) - np.min(vol))
+    return projs 
+   
 
 def create_sinogram_slice(projs, CoR, slice_idx):
     """
     Create a sinogram from a set of projections.
     """
-    theta, nx, ny = projs.shape
+    theta, _, ny = projs.shape
 
     sino = np.zeros((theta//2, 2 * ny - CoR))
 
@@ -252,12 +240,8 @@ def create_sinogram(projs, CoR):
     """
     Create sinograms from a set of projections.
     """
-    temp = normalization_min_max(projs)
 
-    projs_weighted = apply_left_weighting(temp, CoR)
-
-    del temp
-    gc.collect()
+    projs_weighted = apply_left_weighting(projs, CoR)
 
     sinos = np.array(
         Parallel(n_jobs=-1, backend='threading')(
@@ -265,6 +249,7 @@ def create_sinogram(projs, CoR):
             for slice_idx in tqdm(range(projs.shape[1]), desc='Creating sinograms')
         )
     )
+
     return sinos
 
 def from_degress_to_radians(angles):
@@ -274,7 +259,9 @@ def from_radians_to_degrees(angles):
     return angles * 180 / pi
 
 def create_angles(sinogram):
-    return np.linspace(0, pi, sinogram.shape[1], endpoint=False)
+    angles = np.linspace(0, pi, sinogram.shape[1], endpoint=False)
+    print(f"Angles: {angles}")
+    return angles
 
 def reconstruct_from_sinogram_slice(sinogram, angles):
     """
@@ -344,6 +331,9 @@ def apply_corrections(viewer, experiment):
     print("Applying corrections")
     sample_layer = viewer.layers[experiment.sample_images].data
 
+    # Adjust for axis order changes in Napari
+    sample_layer = np.transpose(sample_layer, viewer.dims.order)
+
     if experiment.darkfield is not None:
         darkfield_layer = np.mean(viewer.layers[experiment.darkfield].data)
         sample_layer = sample_layer - darkfield_layer
@@ -354,6 +344,34 @@ def apply_corrections(viewer, experiment):
 
     return sample_layer
 
+def apply_corrections_one_slice(viewer, experiment):
+    """
+    Apply flatfield and darkfield corrections to the sample layers 
+    using the data stored in the experiment object.
+    """
+    print("Applying corrections")
+    slice_idx = experiment.slice_idx
+
+    sample_layer = viewer.layers[experiment.sample_images].data
+
+    # Check if the data is 2D or 3D
+    if sample_layer.ndim == 3:
+        # Adjust for axis order changes in Napari
+        sample_layer = np.transpose(sample_layer, viewer.dims.order)
+        sample_slice = sample_layer[slice_idx]
+    else:
+        sample_slice = sample_layer
+
+    if experiment.darkfield is not None:
+        darkfield_layer = np.mean(viewer.layers[experiment.darkfield].data) if sample_layer.ndim == 3 else viewer.layers[experiment.darkfield].data
+        sample_slice = sample_slice - darkfield_layer
+
+    if experiment.flatfield is not None:
+        flatfield_layer = np.mean(viewer.layers[experiment.flatfield].data) if sample_layer.ndim == 3 else viewer.layers[experiment.flatfield].data
+        sample_slice = sample_slice / flatfield_layer
+
+    return sample_slice
+
 def add_image_to_layer(results, method, viewer):
     """
     Add the resulting image to the viewer as a new layer.
@@ -361,14 +379,16 @@ def add_image_to_layer(results, method, viewer):
     for name, image in results.items():
         viewer.add_image(image.real, name=f"{name}_{method}")
 
-def process_one_slice(experiment, viewer):
+def process_try_paganin(experiment, viewer):
+
+    print(viewer.dims.order)
 
     processing_dialog = create_processing_dialog(viewer.window.qt_viewer)
 
     try:
-        sample_layer = apply_corrections(viewer, experiment)
+        sample_layer = apply_corrections_one_slice(viewer, experiment)
 
-        theta, nx, ny = sample_layer.shape
+        nx, ny = sample_layer.shape
 
         energy = experiment.energy
         pixel_size = experiment.pixel
@@ -377,26 +397,9 @@ def process_one_slice(experiment, viewer):
         effective_pixel_size = experiment.effective_pixel
         dist_object_detector = experiment.dist_object_detector
 
-        projs = np.array(Parallel(n_jobs=-1, backend='threading')(
-            delayed(process_projection)(proj, nx, ny, energy, pixel_size, dist_object_detector, beta, delta, effective_pixel_size) 
-            for proj in tqdm(sample_layer, desc='Processing Paganin filter')))
+        proj = process_projection(sample_layer, nx, ny, energy, pixel_size, dist_object_detector, beta, delta, effective_pixel_size)
         
-        if experiment.double_flatfield:
-            print("Applying double flatfield correction")
-            projs = double_flatfield_correction(projs)
-
-        CoR = round(experiment.center_of_rotation)
-
-        print("Creating sinogram")
-        sinogram = create_sinogram(projs, CoR)
-        angles = create_angles(sinogram)
-
-        slice_idx = experiment.slice_idx
-
-        print("Reconstructing slice")
-        reconstruction = reconstruct_from_sinogram_slice(sinogram[slice_idx], angles)
-
-        add_image_to_layer({"Reconstruction": reconstruction}, "FBP", viewer)
+        add_image_to_layer({"Reconstruction": proj}, "FBP", viewer)
 
     except Exception as e:
         print(f"Error processing slice: {e}")
@@ -428,18 +431,27 @@ def process_all_slices(experiment, viewer):
         if experiment.double_flatfield:
             print("Applying double flatfield correction")
             projs = double_flatfield_correction(projs)
+            add_image_to_layer({"Double Flatfield Correction": projs}, "DFC", viewer)
 
-        CoR = round(experiment.center_of_rotation)
+        if experiment.center_of_rotation is not None:
+            print("Creating sinogram from half acquisition with center of rotation : ", experiment.center_of_rotation)
+            CoR = round(2 * experiment.center_of_rotation)
+            sinogram = create_sinogram(projs, CoR)
+        else:
+            print("Creating sinogram from full acquisition")
+            sinogram = np.swapaxes(projs, 0, 1)
 
-        print("Creating sinogram")
-        sinogram = create_sinogram(projs, CoR)
         angles = create_angles(sinogram)
-
         disk_mask = create_disk_mask(sinogram)
-
         reconstruction = np.zeros((sinogram.shape[0], sinogram.shape[2], sinogram.shape[2]))
         print("Reconstructing slices")
         for i in tqdm(range(sinogram.shape[0])):
             reconstruction[i] = reconstruct_from_sinogram_slice(sinogram[i], angles) * disk_mask
 
         add_image_to_layer({"Reconstruction": reconstruction}, "FBP", viewer)
+
+    except Exception as e:
+        print(f"Error processing all slices: {e}")
+
+    finally:
+        processing_dialog.close()

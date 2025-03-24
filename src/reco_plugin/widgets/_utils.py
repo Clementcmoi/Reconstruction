@@ -84,7 +84,7 @@ class Experiment:
             self.beta = float(widget.beta_input.text())
             self.dist_object_detector = float(widget.distance_object_detector_input.text())           
             self.double_flatfield = widget.double_flatfield_checkbox.isChecked()
-            self.center_of_rotation = float(widget.center_of_rotation_input.text())
+            self.center_of_rotation = float(widget.center_of_rotation_input.text()) if widget.half_acquisition_checkbox.isChecked() else None
 
             self.save_settings()
 

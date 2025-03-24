@@ -6,7 +6,7 @@ def napari_get_reader(path):
     if isinstance(path, list):
         path = path[0]
 
-    if path.endswith('.nxs'):  
+    if path.endswith('.nxs') or path.endswith('.tdf'):  
         return read_nxs
 
 def find_datasets_with_dim_3(file, group=None, path="", results=None):

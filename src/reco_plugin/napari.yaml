@@ -18,5 +18,5 @@ contributions:
 
   readers:
     - command: reco-plugin.get_reader
-      filename_patterns: ["*.nxs"]
+      filename_patterns: ["*.nxs", "*.tdf"]
       accepts_directories: false
