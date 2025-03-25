@@ -4,8 +4,12 @@ except ImportError:
     __version__ = "unknown"
 
 from ._widget import ReconstructionWidget
+from ._writer import write_tiff
 
-__all__ = ["ReconstructionWidget", "__version__"]
+__all__ = (
+    "__version__",
+    "ReconstructionWidget", 
+    "write_tiff")
 
 def napari_experimental_provide_dock_widget():
     return ReconstructionWidget

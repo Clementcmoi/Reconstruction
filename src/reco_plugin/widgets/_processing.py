@@ -8,6 +8,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 from skimage.draw import disk
 import astra
+import cupy as cp
 
 
 
@@ -92,7 +93,7 @@ def padding(image, energy, effective_pixel_size, distance):
     left = (nx_padded - nx) // 2
     right = nx_padded - nx - left
 
-    return np.pad(image, ((top, bottom), (left, right)), mode='reflect'), nx_padded, ny_padded
+    return cp.pad(image, ((top, bottom), (left, right)), mode='reflect'), nx_padded, ny_padded
 
 def paganin_filter(sample_images, energy_kev, pixel_size, delta_beta, dist_object_detector, beta=1e-10):
     """
@@ -125,27 +126,30 @@ def paganin_filter(sample_images, energy_kev, pixel_size, delta_beta, dist_objec
 
     mu = 2 * beta * waveNumber
 
-    fftNum = fftshift(fft2(sample_images))
+    fftNum = cp.fft.fftshift(cp.fft.fft2(sample_images))
     Nx, Ny = fftNum.shape
 
-    u = fftfreq(Nx, d=pix_size)
-    v = fftfreq(Ny, d=pix_size)
+    u = cp.fft.fftfreq(Nx, d=pix_size)
+    v = cp.fft.fftfreq(Ny, d=pix_size)
 
-    u, v = np.meshgrid(np.arange(0,Nx), np.arange(0,Ny))
+    u, v = cp.meshgrid(cp.arange(0,Nx), cp.arange(0,Ny))
     u = u - (Nx/2)
     v = v - (Ny/2)
     u_m = u / (Nx * pix_size) 
     v_m = v / (Ny * pix_size)
-    uv_sqrd = np.transpose(u_m**2 + v_m**2)
+    uv_sqrd = cp.transpose(u_m**2 + v_m**2)
 
     denominator = 1 + pi * delta_beta * dist_object_detector * lambda_energy * uv_sqrd
-    denominator[denominator == 0] = np.finfo(float).eps
+    denominator[denominator == 0] = cp.finfo(float).eps
 
-    tmpThickness = ifft2(ifftshift(fftNum / denominator))
-    img_thickness = np.real(tmpThickness)
+    tmpThickness = cp.fft.ifft2(cp.fft.ifftshift(fftNum / denominator))
+    img_thickness = cp.real(tmpThickness)
+    img_thickness = -cp.asnumpy(cp.log(img_thickness) / mu) * 1e6
+
     img_thickness[img_thickness <= 0] = 0.000000000001
 
-    return (-np.log(img_thickness) / mu) * 1e6
+    return img_thickness
+
 
 def process_projection(proj, nx, ny, energy, effective_pixel_size, distance, beta, delta, pixel_size):
         """
@@ -181,7 +185,7 @@ def process_projection(proj, nx, ny, energy, effective_pixel_size, distance, bet
         numpy.ndarray
             Processed image.
         """
-        padded_proj, ny_padded, nx_padded = padding(proj, energy, effective_pixel_size, distance)
+        padded_proj, ny_padded, nx_padded = padding(cp.asarray(proj), energy, effective_pixel_size, distance)
         retrieved_proj = paganin_filter(padded_proj, energy, pixel_size, delta/beta, distance, beta)
         x_margin = abs(nx_padded - nx) // 2
         y_margin = abs(ny_padded - ny) // 2

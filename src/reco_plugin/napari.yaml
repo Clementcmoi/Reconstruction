@@ -12,6 +12,10 @@ contributions:
       python_name: reco_plugin._reader:napari_get_reader
       title: Read NXS Files
 
+    - id: reco-plugin.tif_writer
+      python_name: reco_plugin._writer:write_tiff
+      title: Write NXS Files
+
   widgets:
     - command: reco-plugin.reconstruction
       display_name: Reconstruction
@@ -20,3 +24,8 @@ contributions:
     - command: reco-plugin.get_reader
       filename_patterns: ["*.nxs", "*.tdf"]
       accepts_directories: false
+
+  writers:
+    - command: reco-plugin.tif_writer
+      layer_types: ["image"]
+      filename_extensions: [".tif"]
