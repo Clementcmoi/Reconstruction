@@ -153,14 +153,42 @@ def add_delta_and_beta_layout(widget):
     layout.addWidget(QLabel("Delta:"))
     widget.delta_input = QLineEdit()
     widget.delta_input.setText(str(widget.experiment.delta) if widget.experiment.delta is not None else "")
+    widget.delta_input.textChanged.connect(lambda: update_delta_beta_ratio(widget))
     layout.addWidget(widget.delta_input)
     
     layout.addWidget(QLabel("Beta:"))
     widget.beta_input = QLineEdit()
     widget.beta_input.setText(str(widget.experiment.beta) if widget.experiment.beta is not None else "")
+    widget.beta_input.textChanged.connect(lambda: update_delta_beta_ratio(widget))
     layout.addWidget(widget.beta_input)
     
     widget.variables_layout.addLayout(layout)
+
+    # Add delta/beta ratio
+    ratio_layout = QHBoxLayout()
+    ratio_layout.addWidget(QLabel("Delta/Beta:"))
+    widget.delta_beta_ratio_label = QLabel()
+    widget.delta_beta_ratio_label.setText(
+        str(float(widget.experiment.delta) / float(widget.experiment.beta))
+        if widget.experiment.delta is not None and widget.experiment.beta is not None and float(widget.experiment.beta) != 0
+        else "N/A"
+    )
+    ratio_layout.addWidget(widget.delta_beta_ratio_label)
+    widget.variables_layout.addLayout(ratio_layout)
+
+def update_delta_beta_ratio(widget):
+    """
+    Update the delta/beta ratio label whenever delta or beta is changed.
+    """
+    try:
+        delta = float(widget.delta_input.text())
+        beta = float(widget.beta_input.text())
+        if beta != 0:
+            widget.delta_beta_ratio_label.setText(f"{delta / beta:.4f}")
+        else:
+            widget.delta_beta_ratio_label.setText("N/A")
+    except ValueError:
+        widget.delta_beta_ratio_label.setText("N/A")
 
 def add_distance_object_detector_layout(widget):
 

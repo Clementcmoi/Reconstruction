@@ -1,6 +1,6 @@
 from qtpy.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel
 import math
-from scipy.fft import fft2, ifft2, fftfreq, fftshift, ifftshift
+from cupy.fft import fft2, ifft2
 from numpy import pi
 import numpy as np
 import gc
@@ -10,187 +10,180 @@ from skimage.draw import disk
 import astra
 import cupy as cp
 
+BOLTZMANN_CONSTANT = 1.3806488e-16  # [erg/k]
+SPEED_OF_LIGHT = 299792458e+2  # [cm/s]
+PI = 3.14159265359
+PLANCK_CONSTANT = 6.58211928e-19  # [keV*s]
 
 
-def keVtoLambda(energy_kev):
+def _wavelength(energy):
+    return 2 * PI * PLANCK_CONSTANT * SPEED_OF_LIGHT / energy
+
+def paganin_filter(
+        data, pixel_size, dist, energy, db, W, pad):
     """
-    Convert energy in keV to wavelength in m.
+    Perform single-step phase retrieval from phase-contrast measurements
+    :cite:`Paganin:02`.
 
     Parameters
     ----------
-    energy_kev : float
-        Energy in keV
-
+    tomo : ndarray
+        3D tomographic data.
+    pixel_size : float, optional
+        Detector pixel size in cm.
+    dist : float, optional
+        Propagation distance of the wavefront in cm.
+    energy : float, optional
+        Energy of incident wave in keV.
+    alpha : float, optional
+        Regularization parameter for Paganin method.
+    method : string
+        phase retrieval method. Standard Paganin or Generalized Paganin.
+    db : float, optional
+        delta/beta for generalized Paganin phase retrieval 
+    W :  float
+        Characteristic transverse lenght scale    	
+    pad : bool, optional
+        If True, extend the size of the projections by padding with zeros.
     Returns
     -------
-    float
-        Wavelength in m
+    ndarray
+        Approximated 3D tomographic phase data.
     """
-    h = 6.58211928e-19  # keV.s
-    c = 299792458  # m/s
-    return h * c / (energy_kev)
 
-def get_padding_size(image, energy, effective_pixel_size, distance):
+    # New dimensions and pad value after padding.
+    py, pz, val = _calc_pad(data, pixel_size, dist, energy, pad)
+
+    # Compute the reciprocal grid.
+    dx, dy, dz = data.shape
+    print('Generalized Paganin method')
+    kf = _reciprocal_gridG(pixel_size, dy + 2 * py, dz + 2 * pz)
+    phase_filter = cp.fft.fftshift(
+        _paganin_filter_factorG(energy, dist, kf, pixel_size, db, W))
+    prj = cp.full((dy + 2 * py, dz + 2 * pz), val, dtype=data.dtype)
+    _retrieve_phase(data, phase_filter, py, pz, prj, pad)
+
+    return -db * data * 0.5
+
+
+def _retrieve_phase(data, phase_filter, px, py, prj, pad):
+    dx, dy, dz = data.shape
+    num_jobs = data.shape[0]
+    normalized_phase_filter = phase_filter / phase_filter.max()
+
+    for m in tqdm(range(num_jobs), desc='Retrieving phase'):
+        prj[px:dy + px, py:dz + py] = cp.asarray(data[m], dtype=data.dtype)
+        prj[:px] = prj[px]
+        prj[-px:] = prj[-px-1]
+        prj[:, :py] = prj[:, py][:, cp.newaxis]
+        prj[:, -py:] = prj[:, -py-1][:, cp.newaxis]
+        fproj = fft2(prj)
+        fproj *= normalized_phase_filter
+        proj = cp.real(ifft2(fproj))
+        if pad:
+            proj = proj[px:dy + px, py:dz + py]
+        data[m] = proj.get()
+
+
+def _calc_pad(data, pixel_size, dist, energy, pad):
     """
-    Calculate the padding size for a 2D image.
+    Calculate new dimensions and pad value after padding.
 
     Parameters
     ----------
-    image : numpy.ndarray
-        2D array of the image.
-    energy : float
-        Energy of the X-ray beam (keV).
-    effective_pixel_size : float
-        Effective pixel size of the detector (m).
-    distance : float
-        Distance between the object and the detector (m).
-
-    Returns
-    -------
-    n_margin : int
-        Padding size.
-    """
-    ny, nx = image.shape
-    wavelength = keVtoLambda(energy)
-
-    # Calculate the padding size
-    n_margin = math.ceil(3 * wavelength * distance / (2 * effective_pixel_size**2))
-    
-    nx_margin = nx + 2 * n_margin
-    ny_margin = ny + 2 * n_margin
-
-    nx_padded = 2 ** math.ceil(math.log2(nx_margin))
-    ny_padded = 2 ** math.ceil(math.log2(ny_margin))
-
-    return nx_padded, ny_padded
-
-def padding(image, energy, effective_pixel_size, distance):
-    """
-    Pad a 2D image to avoid edge artifacts during phase retrieval with the closest value.
-
-    Parameters
-    ----------
-    image : numpy.ndarray
-        2D array of the image.
-    energy : float
-        Energy of the X-ray beam (keV).
-    effective_pixel_size : float
-        Effective pixel size of the detector (m).
-    distance : float
-        Distance between the object and the detector (m).
-
-    Returns
-    -------
-    padded_image : numpy.ndarray
-        Padded image.
-    """
-    
-    ny, nx = image.shape
-    nx_padded, ny_padded = get_padding_size(image, energy, effective_pixel_size, distance)
-
-    top = (ny_padded - ny) // 2
-    bottom = ny_padded - ny - top
-    left = (nx_padded - nx) // 2
-    right = nx_padded - nx - left
-
-    return cp.pad(image, ((top, bottom), (left, right)), mode='reflect'), nx_padded, ny_padded
-
-def paganin_filter(sample_images, energy_kev, pixel_size, delta_beta, dist_object_detector, beta=1e-10):
-    """
-    Apply the Paganin filter to an image.
-
-    Parameters
-    ----------
-    sample_images : numpy.ndarray
-        Image to filter.
-    energy_kev : float
-        Energy of the X-ray beam (keV).
+    data : ndarray
+        3D tomographic data.
     pixel_size : float
-        Effective pixel size of the detector (m).
-    delta_beta : float
-        Delta over beta value.
-    dist_object_detector : float
-        Distance between the object and the detector (m).
-    beta : float
-        Beta value for phase retrieval.
+        Detector pixel size in cm.
+    dist : float
+        Propagation distance of the wavefront in cm.
+    energy : float
+        Energy of incident wave in keV.
+    pad : bool
+        If True, extend the size of the projections by padding with zeros.
 
     Returns
     -------
-    img_thickness : numpy.ndarray
-        Filtered image.
+    int
+        Pad amount in projection axis.
+    int
+        Pad amount in sinogram axis.
+    float
+        Pad value.
     """
-    lambda_energy = keVtoLambda(energy_kev)
-    pix_size = pixel_size
+    dx, dy, dz = data.shape
+    wavelength = _wavelength(energy)
+    py, pz, val = 0, 0, 0
+    if pad:
+        val = _calc_pad_val(data)
+        py = _calc_pad_width(dy, pixel_size, wavelength, dist)
+        pz = _calc_pad_width(dz, pixel_size, wavelength, dist)
 
-    waveNumber = 2 * pi / lambda_energy
+    return py, pz, val
 
-    mu = 2 * beta * waveNumber
-
-    fftNum = cp.fft.fftshift(cp.fft.fft2(sample_images))
-    Nx, Ny = fftNum.shape
-
-    u = cp.fft.fftfreq(Nx, d=pix_size)
-    v = cp.fft.fftfreq(Ny, d=pix_size)
-
-    u, v = cp.meshgrid(cp.arange(0,Nx), cp.arange(0,Ny))
-    u = u - (Nx/2)
-    v = v - (Ny/2)
-    u_m = u / (Nx * pix_size) 
-    v_m = v / (Ny * pix_size)
-    uv_sqrd = cp.transpose(u_m**2 + v_m**2)
-
-    denominator = 1 + pi * delta_beta * dist_object_detector * lambda_energy * uv_sqrd
-    denominator[denominator == 0] = cp.finfo(float).eps
-
-    tmpThickness = cp.fft.ifft2(cp.fft.ifftshift(fftNum / denominator))
-    img_thickness = cp.real(tmpThickness)
-    img_thickness = -cp.asnumpy(cp.log(img_thickness) / mu) * 1e6
-
-    img_thickness[img_thickness <= 0] = 0.000000000001
-
-    return img_thickness
+def _paganin_filter_factorG(energy, dist, kf, pixel_size, db, W):
+    """
+        Generalized phase retrieval method
+        Paganin et al 2020
+        diffracting feature ~2*pixel size
+    """
+    aph = db*(dist*_wavelength(energy))/(4*PI)
+    return 1 / (1.0 - (2*aph/(W**2))*(kf-2))
 
 
-def process_projection(proj, nx, ny, energy, effective_pixel_size, distance, beta, delta, pixel_size):
-        """
-        Process a single projection image.
+def _calc_pad_width(dim, pixel_size, wavelength, dist):
+    pad_pix = cp.ceil(PI * wavelength * dist / pixel_size ** 2)
+    return int((pow(2, cp.ceil(cp.log2(dim + pad_pix))) - dim) * 0.5)
 
-        Parameters
-        ----------
-        proj : numpy.ndarray
-            Projection image.
-        nx : int
-            Width of the image.
-        ny : int
-            Height of the image.
-        white : numpy.ndarray
-            Whitefield image.
-        dark : numpy.ndarray
-            Darkfield image.
-        energy : float
-            Energy of the X-ray beam (keV).
-        effective_pixel_size : float
-            Effective pixel size of the detector (m).
-        distance : float
-            Distance between the object and the detector (m).
-        beta : float
-            Beta value for phase retrieval.
-        delta : float
-            Delta value for phase retrieval.
-        pixel_size : float
-            Detector pixel size (m).
 
-        Returns
-        -------
-        numpy.ndarray
-            Processed image.
-        """
-        padded_proj, ny_padded, nx_padded = padding(cp.asarray(proj), energy, effective_pixel_size, distance)
-        retrieved_proj = paganin_filter(padded_proj, energy, pixel_size, delta/beta, distance, beta)
-        x_margin = abs(nx_padded - nx) // 2
-        y_margin = abs(ny_padded - ny) // 2
+def _calc_pad_val(data):
+    return float(cp.mean((data[..., 0] + data[..., -1]) * 0.5))
 
-        return retrieved_proj[x_margin:x_margin+nx, y_margin:y_margin+ny]
+def _reciprocal_gridG(pixel_size, nx, ny):
+    """
+    Calculate reciprocal grid for Generalized Paganin method.
+
+    Parameters
+    ----------
+    pixel_size : float
+        Detector pixel size in cm.
+    nx, ny : int
+        Size of the reciprocal grid along x and y axes.
+
+    Returns
+    -------
+    ndarray
+        Grid coordinates.
+    """
+    # Considering diffracting feature ~2*pixel size
+    # Sampling in reciprocal space.
+    indx = cp.cos(_reciprocal_coord(pixel_size, nx)*2*PI*pixel_size)
+    indy = cp.cos(_reciprocal_coord(pixel_size, ny)*2*PI*pixel_size)
+    idx, idy = cp.meshgrid(indy, indx)
+    return idx + idy
+
+
+def _reciprocal_coord(pixel_size, num_grid):
+    """
+    Calculate reciprocal grid coordinates for a given pixel size
+    and discretization.
+
+    Parameters
+    ----------
+    pixel_size : float
+        Detector pixel size in cm.
+    num_grid : int
+        Size of the reciprocal grid.
+
+    Returns
+    -------
+    ndarray
+        Grid coordinates.
+    """
+    n = num_grid - 1
+    rc = cp.arange(-n, num_grid, 2, dtype=cp.float32)
+    rc *= 0.5 / (n * pixel_size)
+    return rc
 
 def double_flatfield_correction(projs):
     """
@@ -234,7 +227,7 @@ def create_sinogram_slice(projs, CoR, slice_idx):
     sino = np.zeros((theta//2, 2 * ny - CoR))
 
     flip = projs[:theta // 2, slice_idx, ::-1]  # np.flip optimisé
-    
+
     sino[:, :ny] += flip
     sino[:,  -ny:] += projs[theta//2:, slice_idx, :]
 
@@ -306,8 +299,11 @@ def reconstruct_from_sinogram_slice(sinogram, angles):
     return reconstruction
 
 def create_disk_mask(sinogram):
+    """
+    Create a circular disk mask for the sinogram.
+    """
     disk_mask = np.zeros((sinogram.shape[2], sinogram.shape[2]))
-    rr, cc = disk((sinogram.shape[2]//2, sinogram.shape[2]//2), sinogram.shape[2] // 2)
+    rr, cc = disk((sinogram.shape[2] // 2, sinogram.shape[2] // 2), sinogram.shape[2] // 2)
     disk_mask[rr, cc] = 1
 
     return disk_mask
@@ -339,11 +335,11 @@ def apply_corrections(viewer, experiment):
     sample_layer = np.transpose(sample_layer, viewer.dims.order)
 
     if experiment.darkfield is not None:
-        darkfield_layer = np.mean(viewer.layers[experiment.darkfield].data)
+        darkfield_layer = np.median(viewer.layers[experiment.darkfield].data)
         sample_layer = sample_layer - darkfield_layer
 
     if experiment.flatfield is not None:
-        flatfield_layer = np.mean(viewer.layers[experiment.flatfield].data)
+        flatfield_layer = np.median(viewer.layers[experiment.flatfield].data)
         sample_layer = sample_layer / flatfield_layer
 
     return sample_layer
@@ -381,7 +377,7 @@ def add_image_to_layer(results, method, viewer):
     Add the resulting image to the viewer as a new layer.
     """
     for name, image in results.items():
-        viewer.add_image(image.real, name=f"{name}_{method}")
+        viewer.add_image(image.real, name=f"{name}_{method}", )
 
 def process_try_paganin(experiment, viewer):
 
@@ -390,18 +386,17 @@ def process_try_paganin(experiment, viewer):
     processing_dialog = create_processing_dialog(viewer.window.qt_viewer)
 
     try:
-        sample_layer = apply_corrections_one_slice(viewer, experiment)
-
-        nx, ny = sample_layer.shape
+        sample_layer = apply_corrections(viewer, experiment)
 
         energy = experiment.energy
         pixel_size = experiment.pixel
         delta = experiment.delta
         beta = experiment.beta
-        effective_pixel_size = experiment.effective_pixel
         dist_object_detector = experiment.dist_object_detector
 
-        proj = process_projection(sample_layer, nx, ny, energy, pixel_size, dist_object_detector, beta, delta, effective_pixel_size)
+        proj = paganin_filter(sample_layer, 
+            pixel_size=pixel_size * 1e2, dist=dist_object_detector * 1e2, energy=energy,  
+            db=delta/beta, W=5*pixel_size*1e2, pad=True)
         
         add_image_to_layer({"Reconstruction": proj}, "FBP", viewer)
 
@@ -419,19 +414,16 @@ def process_all_slices(experiment, viewer):
     try:
         sample_layer = apply_corrections(viewer, experiment)
 
-        theta, nx, ny = sample_layer.shape
-
         energy = experiment.energy
         pixel_size = experiment.pixel
         delta = experiment.delta
         beta = experiment.beta
-        effective_pixel_size = experiment.effective_pixel
         dist_object_detector = experiment.dist_object_detector
 
-        projs = np.array(Parallel(n_jobs=-1, backend='threading')(
-            delayed(process_projection)(proj, nx, ny, energy, pixel_size, dist_object_detector, beta, delta, effective_pixel_size) 
-            for proj in tqdm(sample_layer, desc='Processing Paganin filter')))
-        
+        projs = paganin_filter(sample_layer, 
+            pixel_size=pixel_size * 1e2, dist=dist_object_detector * 1e2, energy=energy,  
+            db=delta/beta, W=3*pixel_size*1e2, pad=True)
+
         if experiment.double_flatfield:
             print("Applying double flatfield correction")
             projs = double_flatfield_correction(projs)
@@ -447,7 +439,9 @@ def process_all_slices(experiment, viewer):
 
         angles = create_angles(sinogram)
         disk_mask = create_disk_mask(sinogram)
+
         reconstruction = np.zeros((sinogram.shape[0], sinogram.shape[2], sinogram.shape[2]))
+
         print("Reconstructing slices")
         for i in tqdm(range(sinogram.shape[0])):
             reconstruction[i] = reconstruct_from_sinogram_slice(sinogram[i], angles) * disk_mask

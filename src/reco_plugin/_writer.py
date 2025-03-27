@@ -17,5 +17,5 @@ def write_tiff(path: str, data: Any, meta: dict) -> list[str]:
         name = os.path.splitext(path)[0]
         path = f"{name}.tif"
 
-    tifffile.imwrite(path, data.astype(np.float32), imagej=True)
+    tifffile.imwrite(path, data.astype(np.float32))
     return [path]
