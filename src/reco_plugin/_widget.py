@@ -48,3 +48,31 @@ class ReconstructionWidget(QWidget):
         self.layout().addSpacerItem(
             QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
         )
+
+class CenterofRotationWidget(QWidget):
+    def __init__(self, napari_viewer: 'napari.Viewer'):
+        super().__init__()
+        self.viewer = napari_viewer
+        self.experiment = Experiment()
+
+        self.setup_ui()
+        LayerUtils.connect_signals(self)
+
+    def setup_ui(self):
+        self.setLayout(QVBoxLayout())
+        self.layout().addWidget(QLabel("Find Center of Rotation"))
+
+        add_layer_and_slice_selection_section(self)
+        add_darkfield_section(self)
+        add_flatfield_section(self)
+
+        add_paganin_section(self)
+
+        add_double_flatfield_section(self)
+
+        add_find_cor_section(self)
+
+        LayerUtils.update_layer_selections(self)
+        self.layout().addSpacerItem(
+            QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        )

@@ -42,9 +42,10 @@ class Experiment:
         self.energy = None
         self.pixel = None
         self.effective_pixel = None
-        self.delta = None
-        self.beta = None
-        self.dist_object_detector = None    
+        self.db = None
+        self.dist_object_detector = None 
+        self.sigma = None
+        self.coeff = None   
 
         self.double_flatfield = None
 
@@ -80,9 +81,10 @@ class Experiment:
             self.energy = float(widget.energy_input.text())
             self.pixel = float(widget.pixel_size_input.text())
             self.effective_pixel = float(widget.effective_pixel_size_input.text())
-            self.delta = float(widget.delta_input.text())
-            self.beta = float(widget.beta_input.text())
-            self.dist_object_detector = float(widget.distance_object_detector_input.text())           
+            self.db = float(widget.db_input.text())
+            self.dist_object_detector = float(widget.distance_object_detector_input.text()) 
+            self.sigma = float(widget.sigma_input.text())
+            self.coeff = float(widget.coeff_input.text())          
             self.double_flatfield = widget.double_flatfield_checkbox.isChecked()
             self.center_of_rotation = float(widget.center_of_rotation_input.text()) if widget.half_acquisition_checkbox.isChecked() else None
 

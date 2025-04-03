@@ -147,48 +147,41 @@ def add_effective_pixel_size_layout(widget):
 
     widget.variables_layout.addLayout(layout)
 
-def add_delta_and_beta_layout(widget):
+def add_delta_beta_layout(widget):
     layout = QHBoxLayout()
     
-    layout.addWidget(QLabel("Delta:"))
-    widget.delta_input = QLineEdit()
-    widget.delta_input.setText(str(widget.experiment.delta) if widget.experiment.delta is not None else "")
-    widget.delta_input.textChanged.connect(lambda: update_delta_beta_ratio(widget))
-    layout.addWidget(widget.delta_input)
-    
-    layout.addWidget(QLabel("Beta:"))
-    widget.beta_input = QLineEdit()
-    widget.beta_input.setText(str(widget.experiment.beta) if widget.experiment.beta is not None else "")
-    widget.beta_input.textChanged.connect(lambda: update_delta_beta_ratio(widget))
-    layout.addWidget(widget.beta_input)
+    layout.addWidget(QLabel("Delta Beta Ration:"))
+    widget.db_input = QLineEdit()
+    widget.db_input.setText(str(widget.experiment.db) if widget.experiment.db is not None else "")
+    layout.addWidget(widget.db_input)
     
     widget.variables_layout.addLayout(layout)
 
-    # Add delta/beta ratio
-    ratio_layout = QHBoxLayout()
-    ratio_layout.addWidget(QLabel("Delta/Beta:"))
-    widget.delta_beta_ratio_label = QLabel()
-    widget.delta_beta_ratio_label.setText(
-        str(float(widget.experiment.delta) / float(widget.experiment.beta))
-        if widget.experiment.delta is not None and widget.experiment.beta is not None and float(widget.experiment.beta) != 0
-        else "N/A"
-    )
-    ratio_layout.addWidget(widget.delta_beta_ratio_label)
-    widget.variables_layout.addLayout(ratio_layout)
+def add_sigma_layout(widget):
+    layout = QHBoxLayout()
 
-def update_delta_beta_ratio(widget):
-    """
-    Update the delta/beta ratio label whenever delta or beta is changed.
-    """
-    try:
-        delta = float(widget.delta_input.text())
-        beta = float(widget.beta_input.text())
-        if beta != 0:
-            widget.delta_beta_ratio_label.setText(f"{delta / beta:.4f}")
-        else:
-            widget.delta_beta_ratio_label.setText("N/A")
-    except ValueError:
-        widget.delta_beta_ratio_label.setText("N/A")
+    layout.addWidget(QLabel("Sigma (px):"))
+    widget.sigma_input = QLineEdit()
+    widget.sigma_input.setText(str(widget.experiment.sigma) if widget.experiment.sigma is not None else "")
+    layout.addWidget(widget.sigma_input)
+
+    widget.variables_layout.addLayout(layout)
+
+def add_coeff_layout(widget):
+    layout = QHBoxLayout()
+
+    layout.addWidget(QLabel("Coefficient:"))
+    widget.coeff_input = QLineEdit()
+    widget.coeff_input.setText(str(widget.experiment.coeff) if widget.experiment.coeff is not None else "")
+    layout.addWidget(widget.coeff_input)
+
+    widget.variables_layout.addLayout(layout)
+
+def add_unsharp_section(widget):
+    widget.variables_layout.addWidget(QLabel("Unsharp Mask"))
+
+    add_sigma_layout(widget)
+    add_coeff_layout(widget)
 
 def add_distance_object_detector_layout(widget):
 
@@ -218,8 +211,10 @@ def add_paganin_section(widget):
     add_energy_layout(widget)
     add_pixel_size_layout(widget)
     add_effective_pixel_size_layout(widget)
-    add_delta_and_beta_layout(widget)
+    add_delta_beta_layout(widget)
     add_distance_object_detector_layout(widget)
+    add_unsharp_section(widget)
+   
 
 def add_double_flatfield_section(widget):
     """
@@ -301,7 +296,14 @@ def process_all(widget):
     result = process_all_slices(widget.experiment, widget.viewer)
 
 
-
+def find_cor(widget):
+    """
+    Find the center of rotation.
+    """
+    widget.experiment.update_parameters(widget)
+    # result = process_find_cor(widget.experiment, widget.viewer)
+    print("Find Center of Rotation")
+    print(widget.experiment.center_of_rotation)
 
 
 

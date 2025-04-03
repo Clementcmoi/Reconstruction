@@ -8,6 +8,10 @@ contributions:
       python_name: reco_plugin._widget:ReconstructionWidget
       title: Reconstruction
 
+    - id: reco-plugin.correlation
+      python_name: reco_plugin._widget:CenterofRotationWidget
+      title: Find Center of Rotation
+
     - id: reco-plugin.get_reader
       python_name: reco_plugin._reader:napari_get_reader
       title: Read NXS Files
@@ -19,6 +23,9 @@ contributions:
   widgets:
     - command: reco-plugin.reconstruction
       display_name: Reconstruction
+
+    - command: reco-plugin.correlation
+      display_name: Find Center of Rotation
 
   readers:
     - command: reco-plugin.get_reader
