@@ -66,7 +66,7 @@ def read_nxs(paths):
                 print(f"Loading full volume: {dataset_key}")
 
                 # Charger l'intégralité du volume sans slicing
-                data = np.array(h5file[dataset_key])
+                data = np.array(h5file[dataset_key], dtype=np.float32)
 
                 if dataset_key not in dataset_layers:
                     dataset_layers[dataset_key] = []

@@ -1,24 +1,15 @@
 from typing import TYPE_CHECKING
-from PyQt5.QtCore import Qt
 from qtpy.QtWidgets import (
     QLabel, 
-    QLineEdit, 
-    QPushButton, 
     QVBoxLayout, 
-    QHBoxLayout, 
     QWidget,
-    QComboBox, 
-    QCheckBox,
     QSpacerItem, 
     QSizePolicy,
-    QInputDialog
 )
 
-from qtpy.QtWidgets import QGroupBox, QVBoxLayout, QLabel, QPushButton, QWidget
-
-
-from .widgets._section import *
-from .widgets._utils import LayerUtils, Experiment
+from .ui_sections import *
+from .utils.layer_utils import LayerUtils
+from .utils.experiment import Experiment
 
 if TYPE_CHECKING:
     import napari
@@ -40,6 +31,7 @@ class ReconstructionWidget(QWidget):
         add_paganin_section(self)
         add_double_flatfield_section(self)
         add_center_of_rotation_section(self)
+        add_process_section(self)
 
         LayerUtils.update_layer_selections(self)
         self.layout().addSpacerItem(
