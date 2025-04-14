@@ -43,12 +43,20 @@ def add_sample_selection_section(widget):
     slice_label = QLabel("Slice:")
     widget.slice_selection = QSpinBox()
     widget.slice_selection.setMinimum(0)
-    widget.slice_selection.setMaximum(1000)
+    widget.slice_selection.setMaximum(1000)  # Default maximum value
+
+    # Set the saved value from the Experiment object
+    saved_slice_idx = int(widget.experiment.slice_idx) if widget.experiment.slice_idx is not None else 0
+    widget.slice_selection.setValue(saved_slice_idx)  # Set the saved value
+
+    widget.bigdata_checkbox = QCheckBox("Big Data Processing")
+
     layout_slice.addWidget(slice_label)
     layout_slice.addWidget(widget.slice_selection)
 
     layout.addLayout(layout_sample)
     layout.addLayout(layout_slice)
+    layout.addWidget(widget.bigdata_checkbox)
 
     group_box.setLayout(layout)
 
@@ -277,6 +285,7 @@ def setup_standard_acquisition(widget, layout):
         widget.cor_min_label = QLabel("COR Min:")
         widget.cor_min_input = QLineEdit()
         widget.cor_min_input.setPlaceholderText("Enter minimum COR")
+        widget.cor_min_input.setText(str(widget.experiment.cor_min) if widget.experiment.cor_min is not None else "")
         cor_layout.addWidget(widget.cor_min_label)
         cor_layout.addWidget(widget.cor_min_input)
 
@@ -284,6 +293,7 @@ def setup_standard_acquisition(widget, layout):
         widget.cor_max_label = QLabel("COR Max:")
         widget.cor_max_input = QLineEdit()
         widget.cor_max_input.setPlaceholderText("Enter maximum COR")
+        widget.cor_max_input.setText(str(widget.experiment.cor_max) if widget.experiment.cor_max is not None else "")
         cor_layout.addWidget(widget.cor_max_label)
         cor_layout.addWidget(widget.cor_max_input)
 
@@ -296,6 +306,7 @@ def setup_standard_acquisition(widget, layout):
         widget.cor_step_label = QLabel("COR Step:")
         widget.cor_step_input = QLineEdit()
         widget.cor_step_input.setPlaceholderText("Enter step size")
+        widget.cor_step_input.setText(str(widget.experiment.cor_step) if widget.experiment.cor_step is not None else "")
         cor_step_layout.addWidget(widget.cor_step_label)
         cor_step_layout.addWidget(widget.cor_step_input)
         layout.addLayout(cor_step_layout)
@@ -330,12 +341,13 @@ def setup_half_acquisition(widget, layout):
     if not hasattr(widget, 'fenetre_label') or widget.fenetre_label is None:
         fenetre_layout = QHBoxLayout()
         widget.fenetre_label = QLabel("Delta Center of Rotation:")
-        widget.fenetre_input = QSpinBox()
-        widget.fenetre_input.setMinimum(1)
-        widget.fenetre_input.setMaximum(1000)
-        widget.fenetre_input.setValue(10)  # Valeur par défaut
+        widget.cor_fenetre_input = QSpinBox()
+        widget.cor_fenetre_input.setMinimum(1)
+        widget.cor_fenetre_input.setMaximum(1000)
+        widget.cor_fenetre_input.setValue(10)  # Valeur par défaut
+        widget.cor_fenetre_input.setValue(int(widget.experiment.cor_fenetre) if widget.experiment.cor_fenetre is not None else 10)
         fenetre_layout.addWidget(widget.fenetre_label)
-        fenetre_layout.addWidget(widget.fenetre_input)
+        fenetre_layout.addWidget(widget.cor_fenetre_input)
         layout.addLayout(fenetre_layout)
 
     # Ajouter un bouton "Test"

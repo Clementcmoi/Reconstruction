@@ -27,7 +27,12 @@ def calc_cor(projs):
     """
     projs_cp: projections [angles, hauteur, largeur] (CuPy array)
     """
-    theta, ny, nx = projs.shape
+    if projs.ndim != 3:
+        theta, nx = projs.shape
+        ny = 1
+    else :
+        theta, ny, nx = projs.shape
+
     start = 0
     stop = ny
     step = 10

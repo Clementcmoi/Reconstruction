@@ -1,4 +1,6 @@
 from qtpy.QtCore import QSettings
+import gc
+import cupy as cp
 
 class Experiment:
     def __init__(self): 
@@ -7,6 +9,7 @@ class Experiment:
         # Initialize parameters
         self.sample_images = None
         self.slice_idx = None
+        self.bigdata = None
 
         self.darkfield = None
         self.flatfield = None
@@ -26,6 +29,7 @@ class Experiment:
         self.cor_min = None
         self.cor_max = None
         self.cor_step = None
+        self.cor_fenetre = None
 
         self.load_settings()
     
@@ -42,6 +46,9 @@ class Experiment:
         """
         Save only the specified parameters to settings. If no parameters are specified, save all.
         """
+        if not hasattr(self, 'settings'):
+            raise AttributeError("Instance has no 'settings' attribute.")
+
         saved_parameters = {}
         for attr in vars(self):
             if attr not in ["settings"]:
@@ -49,18 +56,22 @@ class Experiment:
                     self.settings.setValue(attr, getattr(self, attr))
                     saved_parameters[attr] = getattr(self, attr)
 
-        print(f"Saved Parameters: {saved_parameters}")
+        print(f"Saved Parameters: {saved_parameters}")  # Debug print to confirm saved parameters
+        return saved_parameters
+
+
 
     def update_parameters(self, widget, parameters_to_update=None):
         """
         Update the parameters based on the widget values, only for the specified parameters.
         """
-        print(f"Updating Parameters")
         try:
             if parameters_to_update is None or "sample_images" in parameters_to_update:
                 self.sample_images = widget.sample_selection.currentText()
             if parameters_to_update is None or "slice_idx" in parameters_to_update:
                 self.slice_idx = int(widget.slice_selection.value())
+            if parameters_to_update is None or "bigdata" in parameters_to_update:
+                self.bigdata = widget.bigdata_checkbox.isChecked()
 
             if parameters_to_update is None or "darkfield" in parameters_to_update:
                 self.darkfield = widget.darkfield_selection.currentText() if widget.darkfield_checkbox.isChecked() else None
@@ -96,6 +107,8 @@ class Experiment:
                 self.cor_max = int(widget.cor_max_input.text())
             if parameters_to_update is None or "cor_step" in parameters_to_update:
                 self.cor_step = int(widget.cor_step_input.text())
+            if parameters_to_update is None or "cor_fenetre" in parameters_to_update:
+                self.cor_fenetre = int(widget.cor_fenetre_input.value())
 
             self.save_settings(parameters_to_save=parameters_to_update)
 

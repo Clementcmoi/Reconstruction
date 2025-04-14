@@ -52,6 +52,17 @@ def get_padding_size(image: cp.ndarray, energy: float, effective_pixel_size: flo
     ny_padded = int(2 ** math.ceil(math.log2(ny_margin)))  # en pixels
     return nx_padded, ny_padded
 
+def get_padding_size_slice(energy: float, effective_pixel_size: float, distance: float) -> int:
+    """
+    Get the padding size for the image using ANKAphase formula.
+    Weitkamp et al. Journal of Synchrotron Radiation, 2013.
+    """
+    wavelength = keVtoLambda(energy)  # en m
+    n_margin = math.ceil(3 * wavelength * distance / (2 * effective_pixel_size ** 2))  # en pixels
+    n_margin = int(2 ** math.ceil(math.log2(n_margin)))  # en pixels
+
+    return n_margin
+
 def padding(image: cp.ndarray, energy: float, effective_pixel_size: float, distance: float) -> cp.ndarray:
     """
     Padding the image using ANKAphase formula.
@@ -100,7 +111,7 @@ def process_projection(proj: np.ndarray, energy: float,pixel_size: float, effect
     y_margin = (ny_padded - ny) // 2
     return retrieved_proj[y_margin:y_margin + ny, x_margin:x_margin + nx].get()
 
-def paganin_filter(projs: np.ndarray, energy: float, pixel_size: float, effective_pixel_size: float, distance: float, delta_beta: float) -> np.ndarray:
+def paganin_filter(projs: np.ndarray, energy: float, pixel_size: float, effective_pixel_size: float, distance: float, delta_beta: float) -> dict[str, np.ndarray]:
     """
     Apply Paganin filter to the projections.
     """
@@ -112,3 +123,38 @@ def paganin_filter(projs: np.ndarray, energy: float, pixel_size: float, effectiv
                                 distance, delta_beta)
     return {'paganin': retrieved_projs}
 
+def paganin_filter_slice(
+    projs: np.ndarray, 
+    slice_idx: int, 
+    energy: float, 
+    pixel_size: float, 
+    effective_pixel_size: float, 
+    distance: float, 
+    delta_beta: float
+) -> dict[str, np.ndarray]:
+    """
+    Apply Paganin filter only around the requested slice, and return only the central slice.
+    """
+    margin = get_padding_size_slice(energy, effective_pixel_size, distance)
+    h = projs.shape[1]
+    start = max(0, slice_idx - margin)
+    end = min(h, slice_idx + margin)
+    
+    projs_crop = np.copy(projs[:, start:end])
+    retrieved_projs = np.zeros_like(projs_crop, dtype=np.float32)
+
+    for i in tqdm(range(projs_crop.shape[0]), desc='Processing Paganin'):
+        retrieved_projs[i] = process_projection(
+            projs_crop[i],
+            energy, 
+            pixel_size, 
+            effective_pixel_size, 
+            distance, 
+            delta_beta
+        )
+
+    # Ligne à extraire dans le crop
+    relative_index = slice_idx - start
+    central_slice = retrieved_projs[:, relative_index]  # shape: (n_angles,)
+    
+    return {'paganin': central_slice}
