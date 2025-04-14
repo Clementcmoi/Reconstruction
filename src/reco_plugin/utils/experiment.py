@@ -1,0 +1,116 @@
+from qtpy.QtCore import QSettings
+import gc
+import cupy as cp
+
+class Experiment:
+    def __init__(self): 
+        self.settings = QSettings("Reco", "recoconfig")
+
+        # Initialize parameters
+        self.sample_images = None
+        self.slice_idx = None
+        self.bigdata = None
+
+        self.darkfield = None
+        self.flatfield = None
+
+        self.energy = None
+        self.pixel = None
+        self.effective_pixel = None
+        self.dist_object_detector = None 
+        self.db = None
+        self.sigma = None
+        self.coeff = None   
+
+        self.double_flatfield = None
+
+        self.acquisition_type = None
+        self.center_of_rotation = None
+        self.cor_min = None
+        self.cor_max = None
+        self.cor_step = None
+        self.cor_fenetre = None
+
+        self.load_settings()
+    
+    def load_settings(self):
+        """
+        Load settings from QSettings into the experiment attributes.
+        """
+        for attr in vars(self):
+            if attr not in ["settings"]:
+                value = self.settings.value(attr, getattr(self, attr))
+                setattr(self, attr, value)
+
+    def save_settings(self, parameters_to_save=None):
+        """
+        Save only the specified parameters to settings. If no parameters are specified, save all.
+        """
+        if not hasattr(self, 'settings'):
+            raise AttributeError("Instance has no 'settings' attribute.")
+
+        saved_parameters = {}
+        for attr in vars(self):
+            if attr not in ["settings"]:
+                if parameters_to_save is None or attr in parameters_to_save:
+                    self.settings.setValue(attr, getattr(self, attr))
+                    saved_parameters[attr] = getattr(self, attr)
+
+        print(f"Saved Parameters: {saved_parameters}")  # Debug print to confirm saved parameters
+        return saved_parameters
+
+
+
+    def update_parameters(self, widget, parameters_to_update=None):
+        """
+        Update the parameters based on the widget values, only for the specified parameters.
+        """
+        try:
+            if parameters_to_update is None or "sample_images" in parameters_to_update:
+                self.sample_images = widget.sample_selection.currentText()
+            if parameters_to_update is None or "slice_idx" in parameters_to_update:
+                self.slice_idx = int(widget.slice_selection.value())
+            if parameters_to_update is None or "bigdata" in parameters_to_update:
+                self.bigdata = widget.bigdata_checkbox.isChecked()
+
+            if parameters_to_update is None or "darkfield" in parameters_to_update:
+                self.darkfield = widget.darkfield_selection.currentText() if widget.darkfield_checkbox.isChecked() else None
+            if parameters_to_update is None or "flatfield" in parameters_to_update:
+                self.flatfield = widget.flatfield_selection.currentText() if widget.flatfield_checkbox.isChecked() else None
+
+            if parameters_to_update is None or "energy" in parameters_to_update:
+                self.energy = float(widget.energy_input.text())
+            if parameters_to_update is None or "pixel" in parameters_to_update:
+                self.pixel = float(widget.pixel_size_input.text())
+            if parameters_to_update is None or "effective_pixel" in parameters_to_update:
+                self.effective_pixel = float(widget.effective_pixel_size_input.text())
+            if parameters_to_update is None or "dist_object_detector" in parameters_to_update:
+                self.dist_object_detector = float(widget.distance_object_detector_input.text())
+            if parameters_to_update is None or "db" in parameters_to_update:
+                self.db = float(widget.db_input.text())
+            if parameters_to_update is None or "sigma" in parameters_to_update:
+                self.sigma = float(widget.sigma_input.text())
+            if parameters_to_update is None or "coeff" in parameters_to_update:
+                self.coeff = float(widget.coeff_input.text())
+
+            if parameters_to_update is None or "double_flatfield" in parameters_to_update:
+                self.double_flatfield = widget.double_flatfield_checkbox.isChecked()
+
+            if parameters_to_update is None or "acquisition_type" in parameters_to_update:
+                self.acquisition_type = widget.acquisition_type_selection.currentIndex()
+            if parameters_to_update is None or "center_of_rotation" in parameters_to_update:
+                self.center_of_rotation = float(widget.center_of_rotation_input.text())
+
+            if parameters_to_update is None or "cor_min" in parameters_to_update:
+                self.cor_min = int(widget.cor_min_input.text())
+            if parameters_to_update is None or "cor_max" in parameters_to_update:
+                self.cor_max = int(widget.cor_max_input.text())
+            if parameters_to_update is None or "cor_step" in parameters_to_update:
+                self.cor_step = int(widget.cor_step_input.text())
+            if parameters_to_update is None or "cor_fenetre" in parameters_to_update:
+                self.cor_fenetre = int(widget.cor_fenetre_input.value())
+
+            self.save_settings(parameters_to_save=parameters_to_update)
+
+        except ValueError as e:
+            print(f"Error updating parameters: {e}")
