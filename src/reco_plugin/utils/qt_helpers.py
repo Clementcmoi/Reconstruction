@@ -1,4 +1,9 @@
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QApplication
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QApplication, QMainWindow, QSlider, QWidget
+
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+from PyQt5.QtWidgets import QMainWindow, QSlider, QVBoxLayout, QWidget
+from PyQt5.QtCore import Qt
 
 def create_processing_dialog(parent, message="Processing..."):
     """
@@ -14,3 +19,41 @@ def create_processing_dialog(parent, message="Processing..."):
     dialog.show()
     QApplication.processEvents()
     return dialog
+
+class PlotWindow(QMainWindow):
+    def __init__(self, plot_data, cor_values):
+        super().__init__()
+        self.plot_data = plot_data
+        self.cor_values = cor_values
+        self.current_index = 0
+
+        self.setWindowTitle("Plot Viewer")
+        self.setGeometry(100, 100, 800, 600)
+
+        self.canvas = FigureCanvas(Figure(figsize=(5, 3)))
+        self.ax = self.canvas.figure.subplots()
+        self.update_plot()
+
+        self.slider = QSlider(Qt.Horizontal)
+        self.slider.setMinimum(0)
+        self.slider.setMaximum(len(plot_data) - 1)
+        self.slider.setValue(self.current_index)
+        self.slider.valueChanged.connect(self.slider_changed)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.canvas)
+        layout.addWidget(self.slider)
+
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+
+    def update_plot(self):
+        self.ax.clear()
+        self.ax.plot(self.plot_data[self.current_index])
+        self.ax.set_title(f"Plot {self.current_index + 1} (COR: {self.cor_values[self.current_index]:.2f})")
+        self.canvas.draw()
+
+    def slider_changed(self, value):
+        self.current_index = value
+        self.update_plot()

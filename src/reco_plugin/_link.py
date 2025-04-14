@@ -2,6 +2,7 @@ from cupyx.scipy.ndimage import shift
 import numpy as np
 import cupy as cp
 from tqdm import tqdm
+from skimage.transform import resize  # Add this import for resizing
 
 from .processing.cor import *
 from .processing.phase import paganin_filter, unsharp_mask
@@ -9,7 +10,7 @@ from .processing.process import apply_flat_darkfield, double_flatfield_correctio
 from .processing.reconstruction import reconstruct_from_sinogram_slice, create_angles, create_disk_mask
 from .processing.sinogram import create_sinogram, create_sinogram_slice
 
-from .utils.qt_helpers import create_processing_dialog
+from .utils.qt_helpers import create_processing_dialog, PlotWindow
 
 
 def add_image_to_layer(results, img_name, viewer):
@@ -113,6 +114,8 @@ def call_standard_cor_test(experiment, viewer, widget):
         cor_candidate = np.arange(cor_min, cor_max + cor_step, cor_step)
 
         slices = []
+        target_shape = None  # Initialize target shape
+
         for cor in tqdm(cor_candidate, desc="Generating Slices"):
             sinogram = cp.asarray(projs[:, slice_idx])
             sinogram = shift(sinogram, (0, cor), order=1, mode='constant')
@@ -122,6 +125,12 @@ def call_standard_cor_test(experiment, viewer, widget):
             slice_ = reconstruct_from_sinogram_slice(sinogram.get(), angles) * disk
 
             slice_ = unsharp_mask(cp.asarray(slice_), sigma=sigma, coeff=coeff).get()
+
+            if target_shape is None:
+                target_shape = slice_.shape  # Set target shape based on the first slice
+            else:
+                slice_ = resize(slice_, target_shape, mode='constant', anti_aliasing=True)  # Resize to match target shape
+
             slices.append(slice_)
 
         slices = {'slice': np.array(slices)}
@@ -133,14 +142,103 @@ def call_standard_cor_test(experiment, viewer, widget):
     finally:
         processing_dialog.close()
 
-def call_find_global_cor(experiment, viewer, widget):
-    pass
 
-def call_precise_local(experiment, viewer, widget):
-    pass
+def call_find_global_cor(experiment, viewer, widget):
+    dialog = create_processing_dialog(viewer.window.qt_viewer)
+    try:
+        # Save only relevant parameters for processing one slice
+        experiment.update_parameters(widget, parameters_to_update=[
+            "slice_idx", "sigma", "coeff", "center_of_rotation", "acquisition_type", "double_flatfield"
+        ])
+        experiment.save_settings(parameters_to_save=[
+            "slice_idx", "sigma", "coeff", "center_of_rotation", "acquisition_type", "double_flatfield"
+        ])
+
+        for layer in viewer.layers:
+            if layer.name.startswith('paganin'):
+                projs = layer.data
+                break
+        else:
+            projs = call_paganin(experiment, viewer, widget)['paganin']
+
+        if widget.double_flatfield_checkbox.isChecked():
+            projs = double_flatfield_correction(projs)
+
+        cor, plot_data = calc_cor(projs)
+
+        cor = cor[np.isfinite(cor)]
+        cor_std = np.std(cor, axis=0)
+        cor_mean = np.mean(cor)
+        mask_cor = (cor > cor_mean - cor_std) & (cor < cor_mean + cor_std)
+        cor_mean = np.mean(cor[mask_cor])
+        widget.center_of_rotation_input.setText(str(cor_mean))
+
+        # Ensure cor is passed as an array to the PlotWindow
+        widget.plot_window = PlotWindow(plot_data, cor_values=cor)
+        widget.plot_window.show()
+
+    except Exception as e:
+        print(f"Error during global COR calculation: {e}")
+    finally:
+        dialog.close()
 
 def call_half_cor_test(experiment, viewer, widget):
-    pass
+    dialog = create_processing_dialog(viewer.window.qt_viewer)
+
+    try:
+        # Save only relevant parameters for the Standard COR test
+        experiment.update_parameters(widget, parameters_to_update=[
+            "slice_idx", "sigma", "coeff", "double_flatfield"
+        ])
+        experiment.save_settings(parameters_to_save=[
+            "slice_idx", "sigma", "coeff", "double_flatfield"
+        ])
+
+        slice_idx = int(widget.slice_selection.value())
+        sigma = float(widget.sigma_input.text())
+        coeff = float(widget.coeff_input.text())
+        cor_test = int(widget.center_of_rotation_input.text())
+        cor_fentre = int(widget.fenetre_input.value())
+
+        for layer in viewer.layers:
+            if layer.name.startswith('paganin'):
+                projs = layer.data
+                break
+        else:
+            projs = call_paganin(experiment, viewer, widget)['paganin']
+
+        if widget.double_flatfield_checkbox.isChecked():
+            projs = double_flatfield_correction(projs)
+
+        cor_candidate = np.arange(cor_test - cor_fentre, cor_test + cor_fentre, 1)
+        projs = cp.asarray(projs[:, slice_idx])
+
+        slices = []
+        target_shape = None  # Initialize target shape
+
+        for cor in tqdm(cor_candidate, desc="Generating Slices"):
+            sinogram = create_sinogram_slice(projs, 2 * cor, slice_idx).get()
+
+            angles = create_angles(sinogram, end=np.pi)
+            disk = create_disk_mask(sinogram)
+            slice_ = reconstruct_from_sinogram_slice(sinogram, angles) * disk
+
+            slice_ = unsharp_mask(cp.asarray(slice_), sigma=sigma, coeff=coeff).get()
+
+            if target_shape is None:
+                target_shape = slice_.shape  # Set target shape based on the first slice
+            else:
+                slice_ = resize(slice_, target_shape, mode='constant', anti_aliasing=True)  # Resize to match target shape
+
+            slices.append(slice_)
+
+        slices = {'slice': np.array(slices)}
+        add_image_to_layer(slices, f"cor_test", viewer)
+
+    except Exception as e:
+        print(f"Error during global COR calculation: {e}")
+    finally:
+        dialog.close()
 
 def call_process_one_slice(experiment, viewer, widget):
     dialog = create_processing_dialog(viewer.window.qt_viewer)

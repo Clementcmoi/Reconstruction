@@ -320,13 +320,8 @@ def setup_half_acquisition(widget, layout):
 
         # Bouton "Find Global"
         widget.global_button = QPushButton("Find Global Center of Rotation")
-        widget.global_button.clicked.connect(lambda: call_find_global_cor(widget.experiment))
+        widget.global_button.clicked.connect(lambda: call_find_global_cor(widget.experiment, widget.viewer, widget))
         button_layout.addWidget(widget.global_button)
-
-        # Bouton "Precise Local"
-        widget.local_button = QPushButton("Precise Local")
-        widget.local_button.clicked.connect(lambda: call_precise_local(widget.experiment))
-        button_layout.addWidget(widget.local_button)
 
         # Ajouter le layout des boutons au layout principal
         layout.addLayout(button_layout)
@@ -334,7 +329,7 @@ def setup_half_acquisition(widget, layout):
     # Ajouter un champ pour sélectionner un entier "fenêtre"
     if not hasattr(widget, 'fenetre_label') or widget.fenetre_label is None:
         fenetre_layout = QHBoxLayout()
-        widget.fenetre_label = QLabel("Fenêtre:")
+        widget.fenetre_label = QLabel("Delta Center of Rotation:")
         widget.fenetre_input = QSpinBox()
         widget.fenetre_input.setMinimum(1)
         widget.fenetre_input.setMaximum(1000)
@@ -346,7 +341,7 @@ def setup_half_acquisition(widget, layout):
     # Ajouter un bouton "Test"
     if not hasattr(widget, 'try_cor_button') or widget.try_cor_button is None:
         widget.try_cor_button = QPushButton("Try Center of Rotation")
-        widget.try_cor_button.clicked.connect(lambda: call_half_cor_test(widget.experiment))
+        widget.try_cor_button.clicked.connect(lambda: call_half_cor_test(widget.experiment, widget.viewer, widget))
         layout.addWidget(widget.try_cor_button)
 
 
@@ -373,7 +368,7 @@ def cleanup_half_acquisition(widget, layout):
     """
     Remove widgets related to Half Acquisition.
     """
-    for attr in ['global_button', 'local_button', 'fenetre_label', 'fenetre_input', 'test_button']:
+    for attr in ['global_button', 'fenetre_label', 'fenetre_input', 'test_button']:
         if hasattr(widget, attr) and getattr(widget, attr) is not None:
             widget_attr = getattr(widget, attr)
             layout.removeWidget(widget_attr)
