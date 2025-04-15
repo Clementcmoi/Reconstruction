@@ -41,10 +41,12 @@ def call_preprocess(experiment, viewer, widget):
         print("Preprocessing...")
 
         sample = np.transpose(viewer.layers[experiment.sample_images].data, viewer.dims.order)
-        dark = np.mean(viewer.layers[experiment.darkfield].data, axis=0) if experiment.darkfield else None
-        flat = np.mean(viewer.layers[experiment.flatfield].data, axis=0) if experiment.flatfield else None
+        dark = np.mean(np.transpose(viewer.layers[experiment.darkfield].data, viewer.dims.order), axis=0) if experiment.darkfield else None
+        flat = np.mean(np.transpose(viewer.layers[experiment.flatfield].data, viewer.dims.order), axis=0) if experiment.flatfield else None
 
         corrected = apply_flat_darkfield(sample, flat, dark)
+
+        print("Corrected shape:", corrected['preprocess'].shape)
 
         # Add to viewer only if bigdata is False
         if not experiment.bigdata:
@@ -183,7 +185,7 @@ def call_find_global_cor(experiment, viewer, widget):
             projs = call_paganin(experiment, viewer, widget)['paganin']
 
         if widget.double_flatfield_checkbox.isChecked():
-            projs = double_flatfield_correction(projs)
+            projs = double_flatfield_correction(projs)["double_flatfield_corrected"]
 
         cor, plot_data = calc_cor(projs)
 
@@ -225,7 +227,7 @@ def call_half_cor_test(experiment, viewer, widget):
             projs = call_paganin(experiment, viewer, widget, one_slice=True)['paganin']
 
         if widget.double_flatfield_checkbox.isChecked():
-            projs = double_flatfield_correction(projs)
+            projs = double_flatfield_correction(projs)["double_flatfield_corrected"]
 
         cor_candidate = np.arange(cor_test - cor_fenetre, cor_test + cor_fenetre, 1)
         projs = cp.asarray(projs)
@@ -281,7 +283,7 @@ def call_process_one_slice(experiment, viewer, widget):
             projs = call_paganin(experiment, viewer, widget, one_slice=True)['paganin']
 
         if widget.double_flatfield_checkbox.isChecked():
-            projs = double_flatfield_correction(projs)
+            projs = double_flatfield_correction(projs)["double_flatfield_corrected"]
 
         projs = cp.asarray(projs)
 
@@ -335,7 +337,7 @@ def call_process_all_slices(experiment, viewer, widget):
             projs = call_paganin(experiment, viewer, widget)['paganin']
 
         if widget.double_flatfield_checkbox.isChecked():
-            projs = double_flatfield_correction(projs)
+            projs = double_flatfield_correction(projs)["double_flatfield_corrected"]
 
         n_slices = projs.shape[1]
         width = projs.shape[-1]

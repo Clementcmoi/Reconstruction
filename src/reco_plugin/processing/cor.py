@@ -1,4 +1,5 @@
 import cupy as cp
+import numpy as np
 from tqdm import tqdm
 
 def process_try_center_of_rotation(self, widget):
@@ -23,7 +24,7 @@ def process_precise_local(self, widget):
     except Exception as e:
         print(f"Error processing precise local: {e}")
 
-def calc_cor(projs):
+def calc_cor(projs: np.ndarray) -> tuple:
     """
     projs_cp: projections [angles, hauteur, largeur] (CuPy array)
     """
