@@ -354,6 +354,7 @@ def call_process_all_slices(experiment, viewer, widget):
                 reconstruction[i] = slice_
         else:
             sinogram = create_sinogram(projs, 2 * cor)
+            clear_memory([projs])
             angles = create_angles(sinogram, end=np.pi)
             reconstruction = np.zeros((sinogram.shape[0], sinogram.shape[2], sinogram.shape[2]), dtype=np.float32)
             mask = create_disk_mask(sinogram)
@@ -361,7 +362,7 @@ def call_process_all_slices(experiment, viewer, widget):
                 slice_ = reconstruct_from_sinogram_slice(sinogram[i], angles) * mask
                 slice_ = unsharp_mask(cp.asarray(slice_), sigma=sigma, coeff=coeff).get()
                 reconstruction[i] = slice_
-
+        clear_memory([sinogram])
         # Create a detailed description of the processing steps
         desc = f"c{cor}_db{experiment.db}_s{sigma}_c{coeff}"
 
@@ -369,7 +370,7 @@ def call_process_all_slices(experiment, viewer, widget):
         add_image_to_layer(result, desc, viewer)
 
         # Clear memory
-        clear_memory([projs, sinogram])
+        
 
         return result
 

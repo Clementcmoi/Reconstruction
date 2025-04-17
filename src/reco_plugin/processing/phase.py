@@ -7,16 +7,15 @@ import cupy as cp
 
 from cupy import pi
 
-from ..constants import PLANCK_J_S, LIGHT_SPEED, KEV_TO_JOULE, PLANCK_keV_S
+from ..constants import PLANCK_J_S, LIGHT_SPEED, KEV_TO_JOULE
 
 def keVtoLambda(keV: float) -> float:
     """
     Convert energy in keV to wavelength in meters.
     """
-    # E = keV * KEV_TO_JOULE              # en J
-    # wavelength_m = (PLANCK_J_S * LIGHT_SPEED) / E  # en m
+    E = keV * KEV_TO_JOULE              # en J
+    wavelength_m = (PLANCK_J_S * LIGHT_SPEED) / E  # en m
 
-    wavelength_m = PLANCK_keV_S * LIGHT_SPEED / keV  # en m
     return wavelength_m
 
 def phase_retrieval(I: cp.ndarray, delta_beta: float, distance: float, energy: float, pixel_size: float) -> cp.ndarray:
@@ -25,7 +24,6 @@ def phase_retrieval(I: cp.ndarray, delta_beta: float, distance: float, energy: f
     Paganin et al. Journal of Microscopy, 2002.
     """
     wavelength = keVtoLambda(energy)  # en m
-    pixel_size = keVtoLambda(pixel_size)  # en m
     ny, nx = I.shape
     u = fftfreq(nx, d=pixel_size)  # en m-1
     v = fftfreq(ny, d=pixel_size)  # en m-1
