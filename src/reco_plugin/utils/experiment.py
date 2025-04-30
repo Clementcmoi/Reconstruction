@@ -24,6 +24,8 @@ class Experiment:
 
         self.double_flatfield = None
 
+        self.angle_between_projections = None
+
         self.acquisition_type = None
         self.center_of_rotation = None
         self.cor_min = None
@@ -95,6 +97,9 @@ class Experiment:
 
             if parameters_to_update is None or "double_flatfield" in parameters_to_update:
                 self.double_flatfield = widget.double_flatfield_checkbox.isChecked()
+
+            if parameters_to_update is None or "angle_between_projections" in parameters_to_update:
+                self.angle_between_projections = widget.angles_checkbox.isChecked()
 
             if parameters_to_update is None or "acquisition_type" in parameters_to_update:
                 self.acquisition_type = widget.acquisition_type_selection.currentIndex()

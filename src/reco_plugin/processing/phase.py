@@ -136,12 +136,13 @@ def paganin_filter_slice(
     margin = get_padding_size_slice(energy, effective_pixel_size, distance)
     h = projs.shape[1]
     start = max(0, slice_idx - margin)
-    end = min(h, slice_idx + margin)
+    end = min(h, slice_idx + margin + 1)
     
     projs_crop = np.copy(projs[:, start:end])
     retrieved_projs = np.zeros_like(projs_crop, dtype=np.float32)
 
     for i in tqdm(range(projs_crop.shape[0]), desc='Processing Paganin'):
+    
         retrieved_projs[i] = process_projection(
             projs_crop[i],
             energy, 

@@ -270,6 +270,20 @@ def add_double_flatfield_section(widget):
     group_box.setLayout(layout)
     widget.layout().addWidget(group_box)
 
+def add_angles_section(widget):
+    """
+    Add angles section to the widget.
+    """
+    group_box = QGroupBox("Angles")
+    layout = QVBoxLayout()
+
+    # Angles checkbox
+    widget.angles_checkbox = QCheckBox("Enable Angles (if half acquisition and .nxs file)")
+    layout.addWidget(widget.angles_checkbox)
+
+    group_box.setLayout(layout)
+    widget.layout().addWidget(group_box)
+
 def setup_standard_acquisition(widget, layout):
     """
     Configure the widgets for Standard Acquisition mode.

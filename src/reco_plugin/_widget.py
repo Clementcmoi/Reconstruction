@@ -30,6 +30,7 @@ class ReconstructionWidget(QWidget):
         add_preprocessing_section(self)
         add_paganin_section(self)
         add_double_flatfield_section(self)
+        add_angles_section(self)
         add_center_of_rotation_section(self)
         add_process_section(self)
 

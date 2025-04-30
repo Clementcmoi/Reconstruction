@@ -4,57 +4,95 @@ import numpy as np
 import cupy as cp
 from tqdm import tqdm
 from skimage.transform import resize
+import h5py
 import gc
 
 # Local imports
 from .processing.cor import *
 from .processing.phase import paganin_filter, unsharp_mask, paganin_filter_slice
 from .processing.process import apply_flat_darkfield, double_flatfield_correction
-from .processing.reconstruction import reconstruct_from_sinogram_slice, create_angles, create_disk_mask
+from .processing.reconstruction import (
+    reconstruct_from_sinogram_slice, create_angles,
+    create_disk_mask
+)
 from .processing.sinogram import create_sinogram, create_sinogram_slice
+from .processing.angles import (
+    find_angles_in_dataset, find_opposite_pairs_best_match,
+    create_sinogram_slice_from_pairs, create_sinograms_from_pairs
+)
 from .utils.qt_helpers import create_processing_dialog, PlotWindow
+
 
 
 # Utility functions
 def add_image_to_layer(results, img_name, viewer):
-    """Add processed images to the viewer."""
     for name, image in results.items():
+        # Explicitly convert CuPy arrays to NumPy arrays before adding to the viewer
+        if isinstance(image, cp.ndarray):
+            image = image.get()
         viewer.add_image(image.real, name=f"{name}_{img_name}")
 
-
 def clear_memory(variables):
-    """
-    Clear variables from RAM and GPU memory.
-    """
     for var in variables:
         del var
-    gc.collect()  # Clear RAM
-    cp._default_memory_pool.free_all_blocks()  # Clear GPU memory
+    gc.collect()
+    cp._default_memory_pool.free_all_blocks()
+
+def get_projections(viewer, prefix, slice_idx=None, fallback_func=None):
+    for layer in viewer.layers:
+        if layer.name.startswith(prefix):
+            try:
+                key = prefix  # Dynamically set the key based on the prefix
+                return {key: layer.data}  # Use dynamic key
+            except Exception as e:
+                print(f"Error retrieving data from layer {layer.name}: {e}")
+    return fallback_func() if fallback_func else None
+
+def get_angles(viewer, experiment, shape, full=True):
+    if viewer.layers[experiment.sample_images].metadata.get('paths') and hasattr(h5py, 'File'):
+        with h5py.File(viewer.layers[experiment.sample_images].metadata['paths'][0], "r") as f:
+            angles = np.radians(find_angles_in_dataset(f, shape))[0]
+            if not full:
+                angles = angles[:shape]
+    else:
+        angles = create_angles(np.empty((shape, shape)), end=2 * np.pi if full else np.pi)
+    return angles
+
+def apply_mask_and_reconstruct(sinogram, angles, sigma, coeff, apply_unsharp=False):
+    mask = create_disk_mask(sinogram)
+    slice_ = reconstruct_from_sinogram_slice(sinogram, angles) * mask
+    if apply_unsharp:
+        slice_ = unsharp_mask(cp.asarray(slice_), sigma=sigma, coeff=coeff).get()
+    return slice_
+
+def pad_and_shift_projection(projs, cor):
+    pad_width = abs(cor)
+    padded_projs = cp.pad(projs, ((0, 0), (pad_width, pad_width)), mode='constant', constant_values=0)
+    shifted = shift(padded_projs, (0, cor), order=1, mode='constant').get()
+    return shifted
+
+def resize_to_target(slice_, target_shape):
+    if slice_.shape != target_shape:
+        resized = resize(slice_, target_shape, mode='constant', anti_aliasing=True)
+        return resized
+    return slice_
 
 
-# Preprocessing
+# Main processing functions
 def call_preprocess(experiment, viewer, widget):
-    """Apply flat and dark field correction to the sample images."""
     dialog = create_processing_dialog(viewer.window._qt_window)
     try:
         experiment.update_parameters(widget, parameters_to_update=["sample_images", "darkfield", "flatfield", "bigdata"])
-        print("Preprocessing...")
 
         sample = np.transpose(viewer.layers[experiment.sample_images].data, viewer.dims.order)
         dark = np.mean(np.transpose(viewer.layers[experiment.darkfield].data, viewer.dims.order), axis=0) if experiment.darkfield else None
         flat = np.mean(np.transpose(viewer.layers[experiment.flatfield].data, viewer.dims.order), axis=0) if experiment.flatfield else None
 
         corrected = apply_flat_darkfield(sample, flat, dark)
-
-        print("Corrected shape:", corrected['preprocess'].shape)
-
-        # Add to viewer only if bigdata is False
         if not experiment.bigdata:
             add_image_to_layer(corrected, experiment.sample_images, viewer)
 
-        # Clear memory
         clear_memory([sample, dark, flat])
-
         return corrected
     except Exception as e:
         print(f"Error during preprocessing: {e}")
@@ -62,319 +100,308 @@ def call_preprocess(experiment, viewer, widget):
         dialog.close()
 
 
-# Paganin filter
 def call_paganin(experiment, viewer, widget, one_slice=False):
-    """Apply Paganin phase retrieval filter."""
     dialog = create_processing_dialog(viewer.window._qt_window)
     try:
         experiment.update_parameters(widget, parameters_to_update=[
             "pixel", "effective_pixel", "dist_object_detector", "energy", "db", "sigma", "coeff"
         ])
 
-        # Retrieve projections
-        projs = next((layer.data for layer in viewer.layers if layer.name.startswith('preprocess')), None)
-        if projs is None:
-            projs = call_preprocess(experiment, viewer, widget)['preprocess']
+        projs = get_projections(viewer, 'preprocess', slice_idx=int(experiment.slice_idx) if one_slice else None,
+                                fallback_func=lambda: call_preprocess(experiment, viewer, widget))['preprocess']
 
-        # Apply Paganin filter
-        if widget.paganin_checkbox.isChecked():
-            if one_slice:
-                result = paganin_filter_slice(
-                    projs, int(experiment.slice_idx), float(experiment.energy),
-                    float(experiment.pixel), float(experiment.effective_pixel),
-                    float(experiment.dist_object_detector), float(experiment.db)
-                )
-            else:
-                result = paganin_filter(
-                    projs, float(experiment.energy), float(experiment.pixel),
-                    float(experiment.effective_pixel), float(experiment.dist_object_detector),
-                    float(experiment.db)
-                )
+        print(f"#DEBUG: Projections shape: {projs.shape}")  # Debug
+        print(f"#DEBUG: Projections dtype: {projs.dtype}")  # Debug
 
-            # Add to viewer only if bigdata is False
-            if not experiment.bigdata:
-                add_image_to_layer(result, experiment.sample_images, viewer)
+        if not widget.paganin_checkbox.isChecked():
+            return {'paganin': projs}
 
-            # Clear memory
-            clear_memory([projs])
-
-            return result
+        if one_slice:
+            result = paganin_filter_slice(
+                projs, int(experiment.slice_idx), float(experiment.energy), float(experiment.pixel),
+                float(experiment.effective_pixel), float(experiment.dist_object_detector), float(experiment.db)
+            )
         else:
-            print("Paganin checkbox is not checked.")
-            return projs
+            result = paganin_filter(
+                projs, float(experiment.energy), float(experiment.pixel), float(experiment.effective_pixel),
+                float(experiment.dist_object_detector), float(experiment.db)
+            )
+
+        # Ensure result is in the expected format
+        if not isinstance(result, dict) or 'paganin' not in result:
+            raise ValueError("#DEBUG: Unexpected result format from paganin_filter or paganin_filter_slice.")
+
+        if not experiment.bigdata:
+            add_image_to_layer(result, experiment.sample_images, viewer)
+
+        clear_memory([projs])
+        return result
     except Exception as e:
         print(f"Error during Paganin: {e}")
     finally:
         dialog.close()
 
-
-# Standard COR test
 def call_standard_cor_test(experiment, viewer, widget):
-    """Perform standard center-of-rotation (COR) test."""
-    processing_dialog = create_processing_dialog(viewer.window._qt_window)
-    try:
-        experiment.update_parameters(widget, parameters_to_update=[
-            "slice_idx", "sigma", "coeff", "cor_min", "cor_max", "cor_step", "double_flatfield"
-        ])
-
-        slice_idx = int(experiment.slice_idx)
-        sigma = float(experiment.sigma)
-        coeff = float(experiment.coeff)
-        cor_min, cor_max, cor_step = map(int, [experiment.cor_min, experiment.cor_max, experiment.cor_step])
-
-        # Retrieve projections
-        projs = next((layer.data[:, slice_idx] if layer.ndim == 3 else layer.data
-                      for layer in viewer.layers if layer.name.startswith('paganin')), None)
-        if projs is None:
-            projs = call_paganin(experiment, viewer, widget, one_slice=True)['paganin']
-
-        if widget.double_flatfield_checkbox.isChecked():
-            projs = double_flatfield_correction(projs)
-
-        # Generate slices for COR candidates
-        cor_candidate = np.arange(cor_min, cor_max + cor_step, cor_step)
-        slices, target_shape = [], None
-        projs = cp.asarray(projs)
-
-        for cor in tqdm(cor_candidate, desc="Generating Slices"):
-            pad_width = abs(cor)
-            padded_projs = cp.pad(projs, ((0, 0), (pad_width, pad_width)), mode='constant', constant_values=0)
-            sinogram_shifted = shift(padded_projs, (0, cor), order=1, mode='constant').get()
-
-            angles = create_angles(sinogram_shifted, end=2 * np.pi)
-            disk = create_disk_mask(sinogram_shifted)
-            slice_ = reconstruct_from_sinogram_slice(sinogram_shifted, angles) * disk
-            slice_ = unsharp_mask(cp.asarray(slice_), sigma=sigma, coeff=coeff).get()
-
-            # Resize to match target shape
-            if target_shape is None:
-                target_shape = slice_.shape
-            else:
-                slice_ = resize(slice_, target_shape, mode='constant', anti_aliasing=True)
-
-            slices.append(slice_)
-
-        slices = {'slice': np.array(slices)}
-
-        # Add to viewer only if bigdata is False
-        if not experiment.bigdata:
-            add_image_to_layer(slices, f"cor_test", viewer)
-
-        # Clear memory
-        clear_memory([projs, padded_projs, sinogram_shifted])
-
-        return slices
-    except Exception as e:
-        print(f"Error during Standard COR test: {e}")
-    finally:
-        processing_dialog.close()
-
-
-# Global COR calculation
-def call_find_global_cor(experiment, viewer, widget):
-    """Calculate global center-of-rotation (COR)."""
+    print("#DEBUG: Starting Standard COR test.")  # Debug
     dialog = create_processing_dialog(viewer.window._qt_window)
     try:
-        experiment.update_parameters(widget, parameters_to_update=[
-            "slice_idx", "sigma", "coeff", "center_of_rotation", "acquisition_type", "double_flatfield"
-        ])
+        # Mise à jour des paramètres de base
+        base_parameters = ["slice_idx", "cor_min", "cor_max", "cor_step", "double_flatfield"]
+        experiment.update_parameters(widget, parameters_to_update=base_parameters)
+        print("#DEBUG: Base parameters updated for Standard COR test.")  # Debug
 
-        # Retrieve projections
-        projs = next((layer.data for layer in viewer.layers if layer.name.startswith('paganin')), None)
-        if projs is None:
-            projs = call_paganin(experiment, viewer, widget)['paganin']
+        slice_idx = int(experiment.slice_idx)
+        sigma, coeff = (float(experiment.sigma), float(experiment.coeff)) if widget.paganin_checkbox.isChecked() else (0, 0)
+        cor_range = np.arange(int(experiment.cor_min), int(experiment.cor_max) + int(experiment.cor_step), int(experiment.cor_step))
 
+        # Vérification si Paganin doit être appliqué
+        if widget.paganin_checkbox.isChecked():
+            projs = get_projections(viewer, 'paganin', slice_idx=slice_idx, fallback_func=lambda: call_paganin(experiment, viewer, widget, one_slice=True))['paganin']
+            apply_unsharp = True
+        else:
+            projs = get_projections(viewer, 'preprocess', slice_idx=slice_idx, fallback_func=lambda: call_preprocess(experiment, viewer, widget))['preprocess']
+            apply_unsharp = False
+
+        print(f"#DEBUG: Projections shape: {projs.shape}")  # Debug
         if widget.double_flatfield_checkbox.isChecked():
-            projs = double_flatfield_correction(projs)["double_flatfield_corrected"]
+            projs = double_flatfield_correction(projs)['double_flatfield_corrected']
+
+        projs = cp.asarray(projs)
+        target_shape, slices = None, []
+
+        for cor in tqdm(cor_range, desc="Generating Slices"):
+            sino = pad_and_shift_projection(projs, cor)
+            angles = get_angles(viewer, experiment, sino.shape[0]) if widget.angles_checkbox.isChecked() else create_angles(sino, end=2 * np.pi)
+            slice_ = apply_mask_and_reconstruct(sino, angles, sigma, coeff, apply_unsharp=apply_unsharp)
+            if target_shape is None:
+                target_shape = slice_.shape
+            slices.append(resize_to_target(slice_, target_shape))
+
+        result = {'slice': np.array(slices)}
+        print(f"#DEBUG: Result shape: {result['slice'].shape}")  # Debug
+        if not experiment.bigdata:
+            add_image_to_layer(result, "cor_test", viewer)
+        clear_memory([projs])
+        return result
+    except Exception as e:
+        print(f"#DEBUG: Error during Standard COR test: {e}")  # Debug
+    finally:
+        dialog.close()
+
+
+def call_find_global_cor(experiment, viewer, widget):
+    print("#DEBUG: Starting global COR calculation.")  # Debug
+    dialog = create_processing_dialog(viewer.window._qt_window)
+    try:
+        experiment.update_parameters(widget, parameters_to_update=["slice_idx", "center_of_rotation", "acquisition_type", "double_flatfield"])
+        print("#DEBUG: Parameters updated for global COR calculation.")  # Debug
+        projs = get_projections(viewer, 'paganin', fallback_func=lambda: call_paganin(experiment, viewer, widget))['paganin']
+        print(f"#DEBUG: Projections shape: {projs.shape}")  # Debug
+        if widget.double_flatfield_checkbox.isChecked():
+            projs = double_flatfield_correction(projs)['double_flatfield_corrected']
 
         cor, plot_data = calc_cor(projs)
-
         cor = cor[np.isfinite(cor)]
-        cor_std = np.std(cor, axis=0)
-        cor_mean = np.mean(cor)
-        mask_cor = (cor > cor_mean - cor_std) & (cor < cor_mean + cor_std)
-        cor_mean = np.mean(cor[mask_cor])
+        cor_mean = np.mean(cor[(cor > np.mean(cor) - np.std(cor)) & (cor < np.mean(cor) + np.std(cor))])
         widget.center_of_rotation_input.setText(str(cor_mean))
 
-        # Ensure cor is passed as an array to the PlotWindow
         widget.plot_window = PlotWindow(plot_data, cor_values=cor)
         widget.plot_window.show()
-
     except Exception as e:
-        print(f"Error during global COR calculation: {e}")
+        print(f"#DEBUG: Error during global COR calculation: {e}")  # Debug
     finally:
         dialog.close()
 
 
-# Half COR test
 def call_half_cor_test(experiment, viewer, widget):
-    """Perform half center-of-rotation (COR) test."""
+    print("#DEBUG: Starting half COR test.")  # Debug
     dialog = create_processing_dialog(viewer.window._qt_window)
     try:
-        experiment.update_parameters(widget, parameters_to_update=[
-            "slice_idx", "sigma", "coeff", "double_flatfield", "center_of_rotation", "cor_fenetre"
-        ])
-
+        experiment.update_parameters(widget, parameters_to_update=["slice_idx", "double_flatfield", "center_of_rotation", "cor_fenetre"])
+        print("#DEBUG: Parameters updated for half COR test.")  # Debug
         slice_idx = int(experiment.slice_idx)
-        sigma = float(experiment.sigma)
-        coeff = float(experiment.coeff)
-        cor_test = int(experiment.center_of_rotation)
-        cor_fenetre = int(experiment.cor_fenetre)
+        sigma, coeff = float(experiment.sigma), float(experiment.coeff)
+        cor_test, cor_fenetre = int(experiment.center_of_rotation), int(experiment.cor_fenetre)
+        cor_range = np.arange(cor_test - cor_fenetre, cor_test + cor_fenetre)
 
-        # Retrieve projections
-        projs = next((layer.data[:, slice_idx] for layer in viewer.layers if layer.name.startswith('paganin')), None)
-        if projs is None:
-            projs = call_paganin(experiment, viewer, widget, one_slice=True)['paganin']
+        if widget.paganin_checkbox.isChecked():
+            projs = get_projections(viewer, 'paganin', slice_idx=slice_idx, fallback_func=lambda: call_paganin(experiment, viewer, widget, one_slice=True))['paganin']
+            apply_unsharp = True
+        else:
+            projs = get_projections(viewer, 'preprocess', slice_idx=slice_idx, fallback_func=lambda: call_preprocess(experiment, viewer, widget))['preprocess']
+            apply_unsharp = False
+
+        print(f"#DEBUG: Projections shape: {projs.shape}")  # Debug
+        if projs.ndim != 2:
+            projs = projs[:, slice_idx]
 
         if widget.double_flatfield_checkbox.isChecked():
-            projs = double_flatfield_correction(projs)["double_flatfield_corrected"]
+            projs = double_flatfield_correction(projs)['double_flatfield_corrected']
 
-        cor_candidate = np.arange(cor_test - cor_fenetre, cor_test + cor_fenetre, 1)
         projs = cp.asarray(projs)
+        target_shape, slices = None, []
 
-        slices, target_shape = [], None
+        for cor in tqdm(cor_range, desc="Generating Slices"):
+            if widget.angles_checkbox.isChecked():
+                print("#DEBUG: Angles checkbox is checked. Processing with angles.")  # Debug
+                metadata_paths = viewer.layers[experiment.sample_images].metadata.get('paths', [])
+                if not metadata_paths:
+                    raise ValueError("#DEBUG: No paths found in metadata.")  # Debug
 
-        for cor in tqdm(cor_candidate, desc="Generating Slices"):
-            sinogram = create_sinogram_slice(projs, 2 * cor, slice_idx).get()
+                hdf5_path = metadata_paths[0]
 
-            angles = create_angles(sinogram, end=np.pi)
-            disk = create_disk_mask(sinogram)
-            slice_ = reconstruct_from_sinogram_slice(sinogram, angles) * disk
-            slice_ = unsharp_mask(cp.asarray(slice_), sigma=sigma, coeff=coeff).get()
-
-            # Resize to match target shape
+                with h5py.File(hdf5_path, 'r') as hdf5_file:
+                    angles = np.radians(find_angles_in_dataset(hdf5_file, projs.shape[0])[0])
+                    pairs = find_opposite_pairs_best_match(angles)
+                    angles = angles[:pairs[-1][0] + 1]
+                    sino = create_sinogram_slice_from_pairs(projs, 2 * cor, pairs)
+            else:
+                sino = create_sinogram_slice(projs, 2 * cor, slice_idx)
+                angles = get_angles(viewer, experiment, 2 * sino.shape[0], full=False) if widget.angles_checkbox.isChecked() else create_angles(sino, end=np.pi)
+            slice_ = apply_mask_and_reconstruct(sino, angles, sigma, coeff, apply_unsharp=apply_unsharp)
             if target_shape is None:
                 target_shape = slice_.shape
-            else:
-                slice_ = resize(slice_, target_shape, mode='constant', anti_aliasing=True)
+            slices.append(resize_to_target(slice_, target_shape))
 
-            slices.append(slice_)
-
-        slices = {'slice': np.array(slices)}
-        add_image_to_layer(slices, f"cor_test", viewer)
-
-        # Clear memory
-        clear_memory([projs, sinogram])
-
+        result = {'slice': np.array(slices)}
+        print(f"#DEBUG: Result shape: {result['slice'].shape}")  # Debug
+        add_image_to_layer(result, "cor_test", viewer)
+        clear_memory([projs])
     except Exception as e:
-        print(f"Error during global COR calculation: {e}")
+        print(f"#DEBUG: Error during half COR test: {e}")  # Debug
     finally:
         dialog.close()
 
-
-# Process one slice
 def call_process_one_slice(experiment, viewer, widget):
-    """Process a single slice."""
     dialog = create_processing_dialog(viewer.window._qt_window)
     try:
-        experiment.update_parameters(widget, parameters_to_update=[
-            "slice_idx", "sigma", "coeff", "center_of_rotation", "acquisition_type", "double_flatfield"
-        ])
+        # Mise à jour des paramètres de base
+        base_parameters = ["slice_idx", "center_of_rotation", "acquisition_type", "double_flatfield"]
+        experiment.update_parameters(widget, parameters_to_update=base_parameters)
 
         slice_idx = int(experiment.slice_idx)
-        sigma = float(experiment.sigma)
-        coeff = float(experiment.coeff)
+        print(f"#DEBUG: Slice index: {slice_idx}")  # Debug
+        sigma, coeff = (float(experiment.sigma), float(experiment.coeff)) if widget.paganin_checkbox.isChecked() else (0, 0)
+        print(f"#DEBUG: Sigma: {sigma}, Coeff: {coeff}")  # Debug
         cor = int(experiment.center_of_rotation)
+        print(f"#DEBUG: Center of rotation: {cor}")  # Debug
 
-        # Retrieve projections
-        projs = next((layer.data[:, slice_idx] if layer.ndim == 3 else layer.data
-                      for layer in viewer.layers if layer.name.startswith('paganin')), None)
-        if projs is None:
-            projs = call_paganin(experiment, viewer, widget, one_slice=True)['paganin']
+        # Vérification si Paganin doit être appliqué
+        if widget.paganin_checkbox.isChecked():
+            print("#DEBUG: Paganin checkbox is checked. Processing with Paganin.")  # Debug
+            projs = get_projections(viewer, 'paganin', fallback_func=lambda: call_paganin(experiment, viewer, widget, one_slice=True))['paganin']
+            print(f"#DEBUG: Projections shape: {projs.shape}")  # Debug
+            apply_unsharp = True
+        else:
+            print("#DEBUG: Paganin checkbox is not checked. Processing with standard projections.")  # Debug
+            projs = get_projections(viewer, 'preprocess', fallback_func=lambda: call_preprocess(experiment, viewer, widget))['preprocess']
+            print(f"#DEBUG: Projections shape: {projs.shape}")
+            apply_unsharp = False
+
+        if projs.ndim != 2:
+            print("#DEBUG: Projections are not 2D. Reshaping.")  # Debug
+            projs = projs[:, slice_idx]
 
         if widget.double_flatfield_checkbox.isChecked():
-            projs = double_flatfield_correction(projs)["double_flatfield_corrected"]
+            print("#DEBUG: Double flatfield checkbox is checked. Applying correction.")  # Debug
+            projs = double_flatfield_correction(projs)['double_flatfield_corrected']
 
+        
         projs = cp.asarray(projs)
 
-        if widget.acquisition_type_selection.currentIndex() == 0:
-            # Pad the image to accommodate the shift
-            pad_width = abs(cor)
-            padded_projs = cp.pad(projs, ((0, 0), (pad_width, pad_width)), mode='constant', constant_values=0)
-            sinogram = shift(padded_projs, (0, cor), order=1, mode='constant').get()
-            angles = create_angles(sinogram, end=2 * np.pi)
+        if widget.angles_checkbox.isChecked():
+            print("#DEBUG: Angles checkbox is checked. Processing with angles.")  # Debug
+            metadata_paths = viewer.layers[experiment.sample_images].metadata.get('paths', [])
+            if not metadata_paths:
+                raise ValueError("#DEBUG: No paths found in metadata.")  # Debug
+            hdf5_path = metadata_paths[0]
+            with h5py.File(hdf5_path, 'r') as hdf5_file:
+                angles = np.radians(find_angles_in_dataset(hdf5_file, projs.shape[0])[0])
+                pairs = find_opposite_pairs_best_match(angles)
+                angles = angles[:pairs[-1][0] + 1]
+                sinogram = create_sinogram_slice_from_pairs(projs, 2 * cor, pairs)
         else:
-            sinogram = create_sinogram_slice(projs, 2 * cor, slice_idx).get()
-            angles = create_angles(sinogram, end=np.pi)
+            if widget.acquisition_type_selection.currentIndex() == 0:
+                sinogram = pad_and_shift_projection(projs, cor)
+                angles = create_angles(sinogram, end=2 * np.pi)
+            else:
+                sinogram = create_sinogram_slice(projs, 2 * cor)
+                angles = create_angles(sinogram, end=np.pi)
 
         if not experiment.bigdata:
             add_image_to_layer({'sinogram': sinogram}, f"cor_{cor}", viewer)
 
-        mask = create_disk_mask(sinogram)
-        slice_ = reconstruct_from_sinogram_slice(sinogram, angles) * mask
-        slice_ = unsharp_mask(cp.asarray(slice_), sigma=sigma, coeff=coeff).get()
-
+        slice_ = apply_mask_and_reconstruct(sinogram, angles, sigma, coeff, apply_unsharp=apply_unsharp)
         result = {'slice': np.array(slice_)}
+        print(f"#DEBUG: Result shape: {result['slice'].shape}")  # Debug
+
         add_image_to_layer(result, f"cor_{cor}", viewer)
-
-        # Clear memory
-        clear_memory([projs, padded_projs, sinogram])
-
+        clear_memory([projs])
         return result
-
     except Exception as e:
-        print(f"Error during slice reconstruction test: {e}")
+        print(f"#DEBUG: Error during single slice processing: {e}")  # Debug
     finally:
         dialog.close()
 
-
-# Process all slices
 def call_process_all_slices(experiment, viewer, widget):
-    """Process all slices."""
+    print("#DEBUG: Starting full volume processing.")  # Debug
     dialog = create_processing_dialog(viewer.window._qt_window)
     try:
-        experiment.update_parameters(widget, parameters_to_update=[
-            "sigma", "coeff", "center_of_rotation", "acquisition_type", "double_flatfield"
-        ])
+        # Mise à jour des paramètres de base
+        base_parameters = ["center_of_rotation", "acquisition_type", "double_flatfield"]
+        experiment.update_parameters(widget, parameters_to_update=base_parameters)
+        print("#DEBUG: Base parameters updated for full volume processing.")  # Debug
 
-        sigma = float(experiment.sigma)
-        coeff = float(experiment.coeff)
+        # Vérification si Paganin doit être appliqué
+        if widget.paganin_checkbox.isChecked():
+            projs = get_projections(viewer, 'paganin', fallback_func=lambda: call_paganin(experiment, viewer, widget))['paganin']
+            apply_unsharp = True
+        else:
+            projs = get_projections(viewer, 'preprocess', fallback_func=lambda: call_preprocess(experiment, viewer, widget))['preprocess']
+            apply_unsharp = False
+
         cor = int(experiment.center_of_rotation)
+        sigma, coeff = (float(experiment.sigma), float(experiment.coeff)) if widget.paganin_checkbox.isChecked() else (0, 0)
 
-        # Retrieve projections
-        projs = next((layer.data for layer in viewer.layers if layer.name.startswith('paganin')), None)
-        if projs is None:
-            projs = call_paganin(experiment, viewer, widget)['paganin']
-
+        print(f"#DEBUG: Projections shape: {projs.shape}")  # Debug
         if widget.double_flatfield_checkbox.isChecked():
-            projs = double_flatfield_correction(projs)["double_flatfield_corrected"]
+            projs = double_flatfield_correction(projs)['double_flatfield_corrected']
 
-        n_slices = projs.shape[1]
-        width = projs.shape[-1]
+        n_slices, width = projs.shape[1], projs.shape[-1]
+        recon = np.zeros((n_slices, width, width), dtype=np.float32) if widget.acquisition_type_selection.currentIndex() == 0 else None
 
         if widget.acquisition_type_selection.currentIndex() == 0:
-            reconstruction = np.zeros((n_slices, width, width), dtype=np.float32)
-            for i in tqdm(range(n_slices), desc="Generating Slices"):
-                sinogram = cp.asarray(projs[:, i])
-                sinogram = shift(sinogram, (0, cor), order=1, mode='constant')
-                angles = create_angles(sinogram, end=2 * np.pi)
-                mask = create_disk_mask(sinogram)
-                slice_ = reconstruct_from_sinogram_slice(sinogram.get(), angles) * mask
-                slice_ = unsharp_mask(cp.asarray(slice_), sigma=sigma, coeff=coeff).get()
-                reconstruction[i] = slice_
+            for i in tqdm(range(n_slices), desc="Processing all slices"):
+                sino = pad_and_shift_projection(cp.asarray(projs[:, i]), cor)
+                angles = get_angles(viewer, experiment, sino.shape[0]) if widget.angles_checkbox.isChecked() else create_angles(sino, end=2*np.pi)
+                slice_ = apply_mask_and_reconstruct(sino, angles, sigma, coeff, apply_unsharp=apply_unsharp)
+                recon[i] = slice_
         else:
-            sinogram = create_sinogram(projs, 2 * cor)
-            clear_memory([projs])
-            angles = create_angles(sinogram, end=np.pi)
-            reconstruction = np.zeros((sinogram.shape[0], sinogram.shape[2], sinogram.shape[2]), dtype=np.float32)
-            mask = create_disk_mask(sinogram)
-            for i in tqdm(range(sinogram.shape[0]), desc="Generating Slices"):
-                slice_ = reconstruct_from_sinogram_slice(sinogram[i], angles) * mask
-                slice_ = unsharp_mask(cp.asarray(slice_), sigma=sigma, coeff=coeff).get()
-                reconstruction[i] = slice_
-        clear_memory([sinogram])
-        # Create a detailed description of the processing steps
-        desc = f"c{cor}_db{experiment.db}_s{sigma}_c{coeff}"
+            if widget.angles_checkbox.isChecked():
+                metadata_paths = viewer.layers[experiment.sample_images].metadata.get('paths', [])
+                if not metadata_paths:
+                    raise ValueError("#DEBUG: No paths found in metadata.")
+                hdf5_path = metadata_paths[0]
+                with h5py.File(hdf5_path, 'r') as hdf5_file:
+                    angles = np.radians(find_angles_in_dataset(hdf5_file, projs.shape[0])[0])
+                    pairs = find_opposite_pairs_best_match(angles)
+                    angles = angles[:pairs[-1][0] + 1]
+                    sino = create_sinograms_from_pairs(projs, 2 * cor, pairs)
 
-        result = {'Vol': np.array(reconstruction)}
-        add_image_to_layer(result, desc, viewer)
+            else:
+                sino = create_sinogram(cp.asarray(projs), 2 * cor)
+                angles = get_angles(viewer, experiment, 2 * sino.shape[0], full=False) if widget.angles_checkbox.isChecked() else create_angles(sino, end=np.pi)
+            recon = np.zeros((sino.shape[0], sino.shape[2], sino.shape[2]), dtype=np.float32)
+            for i in tqdm(range(sino.shape[0]), desc="Processing all slices"):
+                slice_ = apply_mask_and_reconstruct(sino[i], angles, sigma, coeff, apply_unsharp=apply_unsharp)
+                recon[i] = slice_
 
-        # Clear memory
-        
-
+        result = {'Vol': recon}
+        print(f"#DEBUG: Result shape: {result['Vol'].shape}")  # Debug
+        add_image_to_layer(result, f"c{cor}_db{experiment.db}_s{sigma}_c{coeff}", viewer)
+        clear_memory([projs])
         return result
-
     except Exception as e:
-        print(f"Error during all-slice reconstruction: {e}")
+        print(f"#DEBUG: Error during full volume processing: {e}")  # Debug
     finally:
         dialog.close()

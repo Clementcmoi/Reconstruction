@@ -11,10 +11,11 @@ def apply_left_weighting(CoR: int) -> cp.ndarray:
     weights = weights[None, :]  # Expand for 2D
     return weights
 
-def create_sinogram_slice(proj: cp.ndarray, CoR: int, slice_idx: int) -> cp.ndarray:
+def create_sinogram_slice(proj: cp.ndarray, CoR: int) -> np.ndarray:
     """
     Create a sinogram from a set of projections, applying left weighting.
     """
+    print(f"Creating sinogram slice with CoR: {CoR}")
     weights = apply_left_weighting(CoR)
 
     theta, ny = proj.shape
@@ -27,7 +28,7 @@ def create_sinogram_slice(proj: cp.ndarray, CoR: int, slice_idx: int) -> cp.ndar
     sino[:, :ny] += flip 
     sino[:, -ny:] += proj_copy[theta // 2:, :] 
 
-    return sino
+    return sino.get()
 
 def create_sinogram(projs: np.ndarray, CoR: int) -> np.ndarray:
     """
@@ -36,7 +37,7 @@ def create_sinogram(projs: np.ndarray, CoR: int) -> np.ndarray:
     sinos = []
     for i in tqdm(range(projs.shape[1]), desc="Creating sinograms"):
 
-        sino = create_sinogram_slice(cp.asarray(projs[:, i, :]), CoR, i).get()
+        sino = create_sinogram_slice(cp.asarray(projs[:, i, :]), CoR, i)
         sinos.append(sino)
 
     return np.array(sinos)  # Combine all sinograms into a numpy array
