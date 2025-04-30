@@ -26,7 +26,7 @@ def process_precise_local(self, widget):
 
 def calc_cor(projs: np.ndarray) -> tuple:
     """
-    projs_cp: projections [angles, hauteur, largeur] (CuPy array)
+    projs: projections [angles, hauteur, largeur]
     """
     if projs.ndim != 3:
         theta, nx = projs.shape
