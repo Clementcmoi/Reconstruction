@@ -22,12 +22,9 @@ from .processing.angles import (
 )
 from .utils.qt_helpers import create_processing_dialog, PlotWindow
 
-
-
 # Utility functions
 def add_image_to_layer(results, img_name, viewer):
     for name, image in results.items():
-        # Explicitly convert CuPy arrays to NumPy arrays before adding to the viewer
         if isinstance(image, cp.ndarray):
             image = image.get()
         viewer.add_image(image.real, name=f"{name}_{img_name}")
@@ -42,8 +39,8 @@ def get_projections(viewer, prefix, slice_idx=None, fallback_func=None):
     for layer in viewer.layers:
         if layer.name.startswith(prefix):
             try:
-                key = prefix  # Dynamically set the key based on the prefix
-                return {key: layer.data}  # Use dynamic key
+                key = prefix 
+                return {key: layer.data}
             except Exception as e:
                 print(f"Error retrieving data from layer {layer.name}: {e}")
     return fallback_func() if fallback_func else None
@@ -65,10 +62,21 @@ def apply_mask_and_reconstruct(sinogram, angles, sigma, coeff, apply_unsharp=Fal
         slice_ = unsharp_mask(cp.asarray(slice_), sigma=sigma, coeff=coeff).get()
     return slice_
 
+def convert_cor_to_shift(cor, width):
+    shift = cor - width // 2
+    return shift
+
 def pad_and_shift_projection(projs, cor):
-    pad_width = abs(cor)
-    padded_projs = cp.pad(projs, ((0, 0), (pad_width, pad_width)), mode='constant', constant_values=0)
-    shifted = shift(padded_projs, (0, cor), order=1, mode='constant').get()
+    shift_value = convert_cor_to_shift(cor, projs.shape[1])
+    pad_width = abs(int(shift_value))
+    
+    if shift_value >= 0:
+        padded_projs = cp.pad(projs, ((0, 0), (pad_width, pad_width)), mode='constant', constant_values=0)
+        shifted = shift(padded_projs, (0, shift_value), order=1, mode='constant').get()
+    else:
+        padded_projs = cp.pad(projs, ((0, 0), (0, pad_width)), mode='constant', constant_values=0)
+        shifted = shift(padded_projs, (0, shift_value), order=1, mode='constant').get()
+    
     return shifted
 
 def resize_to_target(slice_, target_shape):
@@ -155,7 +163,6 @@ def call_standard_cor_test(experiment, viewer, widget):
     print("Starting Standard COR test.")
     dialog = create_processing_dialog(viewer.window._qt_window)
     try:
-        # Mise à jour des paramètres de base
         base_parameters = ["slice_idx", "cor_min", "cor_max", "cor_step", "double_flatfield"]
         experiment.update_parameters(widget, parameters_to_update=base_parameters)
 
@@ -163,7 +170,6 @@ def call_standard_cor_test(experiment, viewer, widget):
         sigma, coeff = (float(experiment.sigma), float(experiment.coeff)) if widget.paganin_checkbox.isChecked() else (0, 0)
         cor_range = np.arange(int(experiment.cor_min), int(experiment.cor_max) + int(experiment.cor_step), int(experiment.cor_step))
 
-        # Vérification si Paganin doit être appliqué
         if widget.paganin_checkbox.isChecked():
             projs = get_projections(viewer, 'paganin', slice_idx=slice_idx, fallback_func=lambda: call_paganin(experiment, viewer, widget, one_slice=True))['paganin']
             apply_unsharp = True
@@ -266,7 +272,6 @@ def call_half_cor_test(experiment, viewer, widget):
 def call_process_one_slice(experiment, viewer, widget):
     dialog = create_processing_dialog(viewer.window._qt_window)
     try:
-        # Mise à jour des paramètres de base
         base_parameters = ["slice_idx", "center_of_rotation", "acquisition_type", "double_flatfield"]
         experiment.update_parameters(widget, parameters_to_update=base_parameters)
 
@@ -274,7 +279,6 @@ def call_process_one_slice(experiment, viewer, widget):
         sigma, coeff = (float(experiment.sigma), float(experiment.coeff)) if widget.paganin_checkbox.isChecked() else (0, 0)
         cor = int(experiment.center_of_rotation)
 
-        # Vérification si Paganin doit être appliqué
         if widget.paganin_checkbox.isChecked():
             projs = get_projections(viewer, 'paganin', fallback_func=lambda: call_paganin(experiment, viewer, widget, one_slice=True))['paganin']
             apply_unsharp = True
@@ -287,7 +291,6 @@ def call_process_one_slice(experiment, viewer, widget):
 
         if widget.double_flatfield_checkbox.isChecked():
             projs = double_flatfield_correction(projs)['double_flatfield_corrected']
-
         
         projs = cp.asarray(projs)
 
@@ -318,11 +321,9 @@ def call_process_one_slice(experiment, viewer, widget):
 def call_process_all_slices(experiment, viewer, widget):
     dialog = create_processing_dialog(viewer.window._qt_window)
     try:
-        # Mise à jour des paramètres de base
         base_parameters = ["center_of_rotation", "acquisition_type", "double_flatfield"]
         experiment.update_parameters(widget, parameters_to_update=base_parameters)
 
-        # Vérification si Paganin doit être appliqué
         if widget.paganin_checkbox.isChecked():
             projs = get_projections(viewer, 'paganin', fallback_func=lambda: call_paganin(experiment, viewer, widget))['paganin']
             apply_unsharp = True

@@ -31,23 +31,20 @@ def add_sample_selection_section(widget):
     group_box = QGroupBox("Sample Selection")
     layout = QVBoxLayout()
 
-    # Sample selection
     layout_sample = QHBoxLayout()
     sample_label = QLabel("Sample:")
     widget.sample_selection = QComboBox()
     layout_sample.addWidget(sample_label)
     layout_sample.addWidget(widget.sample_selection)
 
-    # Slice selection
     layout_slice = QHBoxLayout()
     slice_label = QLabel("Slice:")
     widget.slice_selection = QSpinBox()
     widget.slice_selection.setMinimum(0)
-    widget.slice_selection.setMaximum(1000)  # Default maximum value
+    widget.slice_selection.setMaximum(1000)
 
-    # Set the saved value from the Experiment object
     saved_slice_idx = int(widget.experiment.slice_idx) if widget.experiment.slice_idx is not None else 0
-    widget.slice_selection.setValue(saved_slice_idx)  # Set the saved value
+    widget.slice_selection.setValue(saved_slice_idx)
 
     widget.bigdata_checkbox = QCheckBox("Big Data Processing")
 
@@ -247,7 +244,6 @@ def add_paganin_section(widget):
     group_box = QGroupBox("Paganin")
     layout = QVBoxLayout()
 
-    # Add Paganin checkbox
     widget.paganin_checkbox = QCheckBox("Enable Paganin")
     widget.paganin_checkbox.stateChanged.connect(
         lambda state: toggle_paganin(widget, state, layout)
@@ -277,7 +273,6 @@ def add_angles_section(widget):
     group_box = QGroupBox("Angles")
     layout = QVBoxLayout()
 
-    # Angles checkbox
     widget.angles_checkbox = QCheckBox("Enable Angles (if half acquisition and .nxs file)")
     layout.addWidget(widget.angles_checkbox)
 
@@ -288,14 +283,11 @@ def setup_standard_acquisition(widget, layout):
     """
     Configure the widgets for Standard Acquisition mode.
     """
-    # Supprimer les widgets liés à Half Acquisition
     cleanup_half_acquisition(widget, layout)
 
-    # Ajouter les champs cor_min, cor_max et cor_step sur la même ligne
     if not hasattr(widget, 'cor_min_label') or widget.cor_min_label is None:
         cor_layout = QHBoxLayout()
 
-        # COR Min
         widget.cor_min_label = QLabel("COR Min:")
         widget.cor_min_input = QLineEdit()
         widget.cor_min_input.setPlaceholderText("Enter minimum COR")
@@ -303,7 +295,6 @@ def setup_standard_acquisition(widget, layout):
         cor_layout.addWidget(widget.cor_min_label)
         cor_layout.addWidget(widget.cor_min_input)
 
-        # COR Max
         widget.cor_max_label = QLabel("COR Max:")
         widget.cor_max_input = QLineEdit()
         widget.cor_max_input.setPlaceholderText("Enter maximum COR")
@@ -311,10 +302,8 @@ def setup_standard_acquisition(widget, layout):
         cor_layout.addWidget(widget.cor_max_label)
         cor_layout.addWidget(widget.cor_max_input)
 
-        # Ajouter le layout horizontal au layout principal
         layout.addLayout(cor_layout)
 
-    # COR Step
     if not hasattr(widget, 'cor_step_label') or widget.cor_step_label is None:
         cor_step_layout = QHBoxLayout()
         widget.cor_step_label = QLabel("COR Step:")
@@ -325,7 +314,6 @@ def setup_standard_acquisition(widget, layout):
         cor_step_layout.addWidget(widget.cor_step_input)
         layout.addLayout(cor_step_layout)
 
-     # Ajouter le bouton "Try Center of Rotation"
     if not hasattr(widget, 'try_cor_button') or widget.try_cor_button is None:
         widget.try_cor_button = QPushButton("Try Center of Rotation")
         widget.try_cor_button.clicked.connect(lambda: call_standard_cor_test(widget.experiment, widget.viewer, widget))
@@ -336,35 +324,29 @@ def setup_half_acquisition(widget, layout):
     """
     Configure the widgets for Half Acquisition mode.
     """
-    # Supprimer les widgets liés à Standard Acquisition
     cleanup_standard_acquisition(widget, layout)
 
-    # Ajouter les boutons "Find Global" et "Precise Local" sur la même ligne
     if not hasattr(widget, 'global_button') or widget.global_button is None:
         button_layout = QHBoxLayout()
 
-        # Bouton "Find Global"
         widget.global_button = QPushButton("Find Global Center of Rotation")
         widget.global_button.clicked.connect(lambda: call_find_global_cor(widget.experiment, widget.viewer, widget))
         button_layout.addWidget(widget.global_button)
 
-        # Ajouter le layout des boutons au layout principal
         layout.addLayout(button_layout)
 
-    # Ajouter un champ pour sélectionner un entier "fenêtre"
     if not hasattr(widget, 'fenetre_label') or widget.fenetre_label is None:
         fenetre_layout = QHBoxLayout()
         widget.fenetre_label = QLabel("Delta Center of Rotation:")
         widget.cor_fenetre_input = QSpinBox()
         widget.cor_fenetre_input.setMinimum(1)
         widget.cor_fenetre_input.setMaximum(1000)
-        widget.cor_fenetre_input.setValue(10)  # Valeur par défaut
+        widget.cor_fenetre_input.setValue(10)  
         widget.cor_fenetre_input.setValue(int(widget.experiment.cor_fenetre) if widget.experiment.cor_fenetre is not None else 10)
         fenetre_layout.addWidget(widget.fenetre_label)
         fenetre_layout.addWidget(widget.cor_fenetre_input)
         layout.addLayout(fenetre_layout)
 
-    # Ajouter un bouton "Test"
     if not hasattr(widget, 'try_cor_button') or widget.try_cor_button is None:
         widget.try_cor_button = QPushButton("Try Center of Rotation")
         widget.try_cor_button.clicked.connect(lambda: call_half_cor_test(widget.experiment, widget.viewer, widget))
@@ -381,7 +363,6 @@ def cleanup_standard_acquisition(widget, layout):
             layout.removeWidget(widget_attr)
             widget_attr.deleteLater()
             setattr(widget, attr, None)
-    # Ensure any remaining layouts are cleared
     if hasattr(widget, 'cor_layout') and widget.cor_layout is not None:
         while widget.cor_layout.count():
             child = widget.cor_layout.takeAt(0)
@@ -400,7 +381,6 @@ def cleanup_half_acquisition(widget, layout):
             layout.removeWidget(widget_attr)
             widget_attr.deleteLater()
             setattr(widget, attr, None)
-    # Ensure any remaining layouts are cleared
     if hasattr(widget, 'button_layout') and widget.button_layout is not None:
         while widget.button_layout.count():
             child = widget.button_layout.takeAt(0)
@@ -425,7 +405,6 @@ def add_center_of_rotation_section(widget):
     group_box = QGroupBox("Center of Rotation")
     layout = QVBoxLayout()
 
-    # Acquisition type selection
     acquisition_type_layout = QHBoxLayout()
     acquisition_type_label = QLabel("Acquisition Type:")
     widget.acquisition_type_selection = QComboBox()
@@ -433,15 +412,12 @@ def add_center_of_rotation_section(widget):
     acquisition_type_layout.addWidget(acquisition_type_label)
     acquisition_type_layout.addWidget(widget.acquisition_type_selection)
 
-    # Connect the acquisition type selection to toggle visibility
     widget.acquisition_type_selection.currentIndexChanged.connect(
         lambda state: toggle_center_of_rotation(widget, state, layout)
     )
 
-    # Add layouts to the group box
     layout.addLayout(acquisition_type_layout)
 
-    # Center of rotation input
     center_of_rotation_layout = QHBoxLayout()
     center_of_rotation_label = QLabel("Center of Rotation:")
     widget.center_of_rotation_input = QLineEdit()
@@ -452,11 +428,9 @@ def add_center_of_rotation_section(widget):
     center_of_rotation_layout.addWidget(widget.center_of_rotation_input)
     layout.addLayout(center_of_rotation_layout)
 
-    # Apply the layout to the group box
     group_box.setLayout(layout)
     widget.layout().addWidget(group_box)
 
-    # Call toggle_center_of_rotation to set the initial state
     toggle_center_of_rotation(widget, widget.acquisition_type_selection.currentIndex(), layout)
 
 
@@ -467,7 +441,6 @@ def add_process_section(widget):
     group_box = QGroupBox("Process")
     layout = QVBoxLayout()
 
-    # Process button
     process_one_slice_button = QPushButton("Process one slice")
     process_one_slice_button.clicked.connect(lambda: call_process_one_slice(widget.experiment, widget.viewer, widget))
     layout.addWidget(process_one_slice_button)

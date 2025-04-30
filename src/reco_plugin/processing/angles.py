@@ -9,6 +9,18 @@ def find_angles_in_dataset(file, nz, group=None, path="", results=None, start_to
     """
     Find all 1D datasets of length `nz`, starting at ~0 and ending at ~360.
     Returns the datasets and their corresponding values.
+
+    Parameters
+    ----------
+    file : h5py.File
+        The HDF5 file to search in.
+    nz : int
+        The expected length of the dataset.
+
+    Returns
+    -------
+    list
+        A list of datasets that match the criteria.
     """
     if results is None:
         results = []
@@ -39,9 +51,11 @@ def find_angles_in_dataset(file, nz, group=None, path="", results=None, start_to
                     print(f"Error reading {current_path}: {e}")
     return results
 
-def find_opposite_pairs_best_match(angles):
+def find_opposite_pairs_best_match(angles: list[float]) -> list[tuple[int, int]]:
     """
     Find the best matching opposite pairs of angles.
+    This function assumes that angles are in radians and are sorted.
+    It finds pairs of angles that are approximately 180 degrees apart.
     """
     angles = np.array(angles) % (2 * np.pi)
     N = len(angles)
@@ -96,14 +110,6 @@ def create_sinograms_from_pairs(projs: np.ndarray, CoR: int, angle_pairs: list[t
     """
     Create sinograms for an entire stack of slices using matched pairs of angles.
     Applies left weighting to both projections.
-    
-    Parameters:
-    - proj: np.ndarray of shape (n_angles, n_slices, n_pixels)
-    - CoR: center of rotation
-    - angle_pairs: list of (i, j) pairs of angles
-    
-    Returns:
-    - sino: np.ndarray of shape (n_slices, len(angle_pairs), 2 * n_pixels - CoR)
     """
     weights = apply_left_weighting(CoR).get()
     n_angles, n_slices, n_pixels = projs.shape

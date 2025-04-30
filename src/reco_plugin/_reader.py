@@ -51,8 +51,7 @@ def read_nxs(paths):
     if isinstance(paths, str):
         paths = [paths]
 
-    dataset_layers = {}  # Stocke les volumes pour chaque dataset
-
+    dataset_layers = {} 
     for path in paths:
         with h5py.File(path, "r") as h5file:
             print(f"Processing file: {path}")
@@ -65,7 +64,6 @@ def read_nxs(paths):
             for dataset_key, shape in datasets_3d:
                 print(f"Loading full volume: {dataset_key}")
 
-                # Charger l'intégralité du volume sans slicing
                 data = np.array(h5file[dataset_key], dtype=np.float32)
 
                 if dataset_key not in dataset_layers:
@@ -79,7 +77,7 @@ def read_nxs(paths):
             if len(volumes) > 1:
                 stacked_volumes = np.stack(volumes, axis=0)
             else:
-                stacked_volumes = volumes[0]  # Un seul volume
+                stacked_volumes = volumes[0]  
 
         except ValueError as e:
             print(f"Error stacking volumes for dataset {dataset_key}: {e}")

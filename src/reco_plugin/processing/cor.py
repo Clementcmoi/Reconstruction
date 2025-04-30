@@ -37,16 +37,15 @@ def calc_cor(projs: np.ndarray) -> tuple:
     start = 0
     stop = ny
     step = 10
-    cor = cp.zeros((stop - start + step - 1) // step, dtype=cp.float32)  # Stocke les centres pour chaque ligne
+    cor = cp.zeros((stop - start + step - 1) // step, dtype=cp.float32)
     plot_data = []
 
     i = 0
     for y in tqdm(range(start, stop, step), desc="Recherche du COR par ligne"):
-        # sinogramme d'une ligne horizontale
-        sino1 = cp.asarray(projs[:theta // 2, y, ::-1])  # Première moitié inversée
-        sino2 = cp.asarray(projs[theta // 2:, y, :])     # Deuxième moitié
+        sino1 = cp.asarray(projs[:theta // 2, y, ::-1])
+        sino2 = cp.asarray(projs[theta // 2:, y, :])
 
-        errors = cp.zeros(nx - 1, dtype=cp.float16)  # Stocke les erreurs pour chaque décalage
+        errors = cp.zeros(nx - 1, dtype=cp.float16)
         for shift in range(1, nx):
             t1 = sino1[:, -shift:]
             t2 = sino2[:, :shift]
@@ -56,8 +55,8 @@ def calc_cor(projs: np.ndarray) -> tuple:
             errors[shift - 1] = mse
 
         best_shift = cp.argmin(errors)
-        plot_data.append(errors.get())  # Convertit en NumPy pour le traçage
-        cor[i] = (best_shift) / 2  # Position estimée du COR
+        plot_data.append(errors.get())
+        cor[i] = (best_shift) / 2
         i += 1
 
-    return cor.get(), plot_data  # Convertit `cor` en NumPy pour l'utilisation ultérieure
+    return cor.get(), plot_data
