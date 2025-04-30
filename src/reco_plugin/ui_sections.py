@@ -375,7 +375,7 @@ def cleanup_half_acquisition(widget, layout):
     """
     Remove widgets related to Half Acquisition.
     """
-    for attr in ['global_button', 'fenetre_label', 'fenetre_input', 'test_button']:
+    for attr in ['global_button', 'fenetre_label', 'cor_fenetre_input', 'try_cor_button']:
         if hasattr(widget, attr) and getattr(widget, attr) is not None:
             widget_attr = getattr(widget, attr)
             layout.removeWidget(widget_attr)
