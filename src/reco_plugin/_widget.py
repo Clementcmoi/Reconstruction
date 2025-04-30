@@ -38,3 +38,23 @@ class ReconstructionWidget(QWidget):
         self.layout().addSpacerItem(
             QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
         )
+
+class MultiPaganinWidget(QWidget):
+    def __init__(self, napari_viewer: 'napari.Viewer'):
+        super().__init__()
+        self.viewer = napari_viewer
+        self.experiment = Experiment()
+        self.setup_ui()
+        LayerUtils.connect_signals(self) 
+
+    def setup_ui(self):
+        self.setLayout(QVBoxLayout())
+        self.layout().addWidget(QLabel("Multi-Paganin"))
+
+        add_sample_selection_section(self)
+        add_preprocessing_section(self)
+        
+        LayerUtils.update_layer_selections(self)
+        self.layout().addSpacerItem(
+            QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        )
