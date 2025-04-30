@@ -63,20 +63,16 @@ def apply_mask_and_reconstruct(sinogram, angles, sigma, coeff, apply_unsharp=Fal
     return slice_
 
 def convert_cor_to_shift(cor, width):
-    shift = cor - width // 2
+    shift = width // 2 - cor
     return shift
 
 def pad_and_shift_projection(projs, cor):
     shift_value = convert_cor_to_shift(cor, projs.shape[1])
     pad_width = abs(int(shift_value))
     
-    if shift_value >= 0:
-        padded_projs = cp.pad(projs, ((0, 0), (pad_width, pad_width)), mode='constant', constant_values=0)
-        shifted = shift(padded_projs, (0, shift_value), order=1, mode='constant').get()
-    else:
-        padded_projs = cp.pad(projs, ((0, 0), (0, pad_width)), mode='constant', constant_values=0)
-        shifted = shift(padded_projs, (0, shift_value), order=1, mode='constant').get()
-    
+    padded_projs = cp.pad(projs, ((0, 0), (pad_width, pad_width)), mode='constant', constant_values=0)
+    shifted = shift(padded_projs, (0, shift_value), order=1, mode='constant').get()
+
     return shifted
 
 def resize_to_target(slice_, target_shape):

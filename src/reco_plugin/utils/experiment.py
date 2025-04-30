@@ -104,7 +104,7 @@ class Experiment:
             if parameters_to_update is None or "acquisition_type" in parameters_to_update:
                 self.acquisition_type = widget.acquisition_type_selection.currentIndex()
             if parameters_to_update is None or "center_of_rotation" in parameters_to_update:
-                self.center_of_rotation = float(widget.center_of_rotation_input.text())
+                self.center_of_rotation = float(widget.center_of_rotation_input.text()) + 1
 
             if parameters_to_update is None or "cor_min" in parameters_to_update:
                 self.cor_min = int(widget.cor_min_input.text())
