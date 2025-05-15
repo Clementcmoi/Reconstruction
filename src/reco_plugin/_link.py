@@ -207,6 +207,7 @@ def call_find_global_cor(experiment, viewer, widget):
         if widget.double_flatfield_checkbox.isChecked():
             projs = double_flatfield_correction(projs)['double_flatfield_corrected']
 
+        print(projs.shape) # Debugging line
         cor, plot_data = calc_cor(projs)
         cor = cor[np.isfinite(cor)]
         cor_mean = np.mean(cor[(cor > np.mean(cor) - np.std(cor)) & (cor < np.mean(cor) + np.std(cor))])

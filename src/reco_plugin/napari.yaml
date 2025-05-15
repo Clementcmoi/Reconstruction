@@ -18,7 +18,11 @@ contributions:
 
     - id: reco-plugin.tif_writer
       python_name: reco_plugin._writer:write_tiff
-      title: Write NXS Files
+      title: Write Tiff Files
+
+    - id: reco-plugin.tif_writer_stack
+      python_name: reco_plugin._writer:write_tiff_stack
+      title: Write Tiff Files into Stack
 
   widgets:
     - command: reco-plugin.reconstruction
@@ -36,3 +40,10 @@ contributions:
     - command: reco-plugin.tif_writer
       layer_types: ["image"]
       filename_extensions: [".tif"]
+      display_name: Single Tiff
+
+    - command: reco-plugin.tif_writer_stack
+      layer_types: ["image"]
+      filename_extensions: [".tif"]
+      display_name: Stack Tiff
+

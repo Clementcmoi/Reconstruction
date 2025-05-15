@@ -9,6 +9,7 @@ from qtpy.QtWidgets import (
     QSpinBox,
     QPushButton,
     QGroupBox,
+    QWidget,
 )
 
 from ._link import *
