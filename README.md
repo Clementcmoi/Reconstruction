@@ -1,10 +1,10 @@
-# reco-plugin: Reconstruction Napari Plugin
+# Reconstruction Napari Plugin
 
-This project is a Napari plugin for scientific image or data reconstruction workflows.
+This project is a Napari plugin for data reconstruction.
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.12
 - [Anaconda](https://www.anaconda.com/)
 - [Napari](https://napari.org/)
 - [Cuda Toolkit](https://developer.nvidia.com/cuda-toolkit)
