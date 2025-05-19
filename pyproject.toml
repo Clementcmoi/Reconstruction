@@ -27,6 +27,9 @@ dependencies = [
     "astra-toolbox",
     "PyQt5",
     "matplotlib",
+    "anaconda",
+    "cuda-toolkit",
+    "cupy-toolkit",
 ]
 
 [project.entry-points."napari.manifest"]
