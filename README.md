@@ -4,7 +4,7 @@ This project is a Napari plugin for data reconstruction.
 
 ## Requirements
 
-- Python 3.12
+- [Python 3.12](https://www.python.org/downloads/release/python-3129/)
 - [Anaconda](https://www.anaconda.com/)
 - [Napari](https://napari.org/)
 - [Cuda Toolkit](https://developer.nvidia.com/cuda-toolkit)
