@@ -2,6 +2,9 @@
 *.npy
 *.tif
 
+# Folder
+launchers/
+
 # Notebooks
 *.ipynb
 
