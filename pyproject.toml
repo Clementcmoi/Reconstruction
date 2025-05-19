@@ -25,6 +25,8 @@ dependencies = [
     "napari",
     "scikit-image",
     "astra-toolbox",
+    "PyQt5",
+    "matplotlib",
 ]
 
 [project.entry-points."napari.manifest"]

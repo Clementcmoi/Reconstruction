@@ -1,3 +1,9 @@
+# Data files
 *.npy
 *.tif
+
+# Notebooks
 *.ipynb
+
+# Scripts à ignorer
+section1.py
