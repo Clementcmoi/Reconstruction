@@ -5,11 +5,11 @@ This project is a Napari plugin for scientific image or data reconstruction work
 ## Requirements
 
 - Python 3.12+
-- [Napari](https://napari.org/)
 - [Anaconda](https://www.anaconda.com/)
-- [cuda-toolkit](https://developer.nvidia.com/cuda-toolkit)
-- [astra-toolbox](https://www.astra-toolbox.com/)
-- [cupy-toolkit](https://cupy.dev/)
+- [Napari](https://napari.org/)
+- [Cuda Toolkit](https://developer.nvidia.com/cuda-toolkit)
+- [Astra Toolbox](https://www.astra-toolbox.com/)
+- [Cupy](https://cupy.dev/)
 - Other dependencies listed in `requirements.txt` or `pyproject.toml`
 
 ## Installation
