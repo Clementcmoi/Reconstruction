@@ -1,9 +1,9 @@
 @echo off
-REM Path to your Miniconda installation (adapt if necessary)
-CALL %USERPROFILE%\anaconda3\Scripts\activate.bat
+REM Path to your Miniconda or Anaconda installation (edit as needed)
+CALL <path_to_conda>\Scripts\activate.bat
 
-REM Activate the napari-env environment
-CALL conda activate napari-env
+REM Activate your napari environment (edit as needed)
+CALL conda activate <your_napari_env>
 
 REM Launch napari
 napari
