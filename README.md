@@ -44,7 +44,7 @@ cd Reconstruction
 pip install -r requirements.txt
 ```
 
-### 5. (Optional) Install the plugin in editable/development mode
+### 5. Install the plugin in editable/development mode
 
 ```bash
 pip install -e .
