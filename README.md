@@ -36,7 +36,7 @@ Start Napari:
 napari
 ```
 
-Then, access the plugin via the Napari plugins menu (`Plugins > reco-plugin > Reconstruction` or `Multi Paganin`).
+Then, access the plugin via the Napari plugins menu (`Plugins > Reconstruction Plugin > Reconstruction` or `Multi Paganin`).
 
 ## Project Structure
 
