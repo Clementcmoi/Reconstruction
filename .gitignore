@@ -2,6 +2,9 @@
 *.npy
 *.tif
 
+# Ignore launchers folder and its contents
+launchers/
+
 # Notebooks
 *.ipynb
 
