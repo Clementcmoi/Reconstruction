@@ -8,8 +8,9 @@ from qtpy.QtWidgets import (
 )
 
 from .ui_sections import *
+from .ui_mp_sections import *
 from .utils.layer_utils import LayerUtils
-from .utils.experiment import Experiment
+from .utils.experiment import Experiment, mpExperiment
 
 if TYPE_CHECKING:
     import napari
@@ -43,7 +44,7 @@ class MultiPaganinWidget(QWidget):
     def __init__(self, napari_viewer: 'napari.Viewer'):
         super().__init__()
         self.viewer = napari_viewer
-        self.experiment = Experiment()
+        self.experiment = mpExperiment()
         self.setup_ui()
         LayerUtils.connect_signals(self) 
 
@@ -53,6 +54,8 @@ class MultiPaganinWidget(QWidget):
 
         add_sample_selection_section(self)
         add_preprocessing_section(self)
+        add_general_parameters_section(self)
+        add_multi_paganin_sections(self)
         
         LayerUtils.update_layer_selections(self)
         self.layout().addSpacerItem(
