@@ -36,8 +36,8 @@ def create_sinogram(projs: np.ndarray, CoR: int) -> np.ndarray:
     """
     sinos = []
     for i in tqdm(range(projs.shape[1]), desc="Creating sinograms"):
-
-        sino = create_sinogram_slice(cp.asarray(projs[:, i, :]), CoR, i)
+        proj = projs[:, i, :]
+        sino = create_sinogram_slice(cp.asarray(proj), CoR)
         sinos.append(sino)
 
     return np.array(sinos)  # Combine all sinograms into a numpy array

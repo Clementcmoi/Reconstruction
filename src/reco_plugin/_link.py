@@ -335,9 +335,9 @@ def call_process_all_slices(experiment, viewer, widget):
             projs = double_flatfield_correction(projs)['double_flatfield_corrected']
 
         n_slices, width = projs.shape[1], projs.shape[-1]
-        recon = np.zeros((n_slices, width, width), dtype=np.float32) if widget.acquisition_type_selection.currentIndex() == 0 else None
 
         if widget.acquisition_type_selection.currentIndex() == 0:
+            recon = np.zeros((n_slices, width, width), dtype=np.float32)
             for i in tqdm(range(n_slices), desc="Processing all slices"):
                 sino = pad_and_shift_projection(cp.asarray(projs[:, i]), cor)
                 angles = get_angles(viewer, experiment, sino.shape[0]) if widget.angles_checkbox.isChecked() else create_angles(sino, end=2*np.pi)
@@ -346,10 +346,11 @@ def call_process_all_slices(experiment, viewer, widget):
         else:
             if widget.angles_checkbox.isChecked():
                 sino, angles = load_angles_and_create_sinograms(viewer, experiment, projs, cor)
-
             else:
                 sino = create_sinogram(cp.asarray(projs), 2 * cor)
-                angles = get_angles(viewer, experiment, 2 * sino.shape[0], full=False) if widget.angles_checkbox.isChecked() else create_angles(sino, end=np.pi)
+                angles = create_angles(sino, end=np.pi)
+            del projs
+            gc.collect()
             recon = np.zeros((sino.shape[0], sino.shape[2], sino.shape[2]), dtype=np.float32)
             for i in tqdm(range(sino.shape[0]), desc="Processing all slices"):
                 slice_ = apply_mask_and_reconstruct(sino[i], angles, sigma, coeff, apply_unsharp=apply_unsharp)
