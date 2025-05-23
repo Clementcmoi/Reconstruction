@@ -19,5 +19,4 @@ def double_flatfield_correction(projs: np.ndarray) -> dict:
     print("Applying double flatfield correction...")
     mean_proj = np.mean(projs, axis=0)
     mean_proj[mean_proj == 0] = 1e-6
-    I_corr = projs / mean_proj
-    return {"double_flatfield_corrected": I_corr}
+    return {"double_flatfield_corrected": projs / mean_proj}

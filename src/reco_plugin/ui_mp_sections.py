@@ -90,7 +90,6 @@ def create_paganin_section(widget, index: int) -> QGroupBox:
     group = QGroupBox(f"Paganin {index}")
     layout = QVBoxLayout()
 
-    # Tu peux remplacer ce QLabel par de vrais champs (QLineEdit, QDoubleSpinBox, etc.)
     layout = QVBoxLayout()
 
     db_layout = QHBoxLayout()

@@ -340,17 +340,18 @@ def call_process_all_slices(experiment, viewer, widget):
             recon = np.zeros((n_slices, width, width), dtype=np.float32)
             for i in tqdm(range(n_slices), desc="Processing all slices"):
                 sino = pad_and_shift_projection(cp.asarray(projs[:, i]), cor)
-                angles = get_angles(viewer, experiment, sino.shape[0]) if widget.angles_checkbox.isChecked() else create_angles(sino, end=2*np.pi)
+                if widget.angles_checkbox.isChecked():
+                    angles = get_angles(viewer, experiment, sino.shape[0])
+                else:
+                    angles = create_angles(sino, end=2*np.pi)
                 slice_ = apply_mask_and_reconstruct(sino, angles, sigma, coeff, apply_unsharp=apply_unsharp)
                 recon[i] = slice_
         else:
             if widget.angles_checkbox.isChecked():
                 sino, angles = load_angles_and_create_sinograms(viewer, experiment, projs, cor)
             else:
-                sino = create_sinogram(cp.asarray(projs), 2 * cor)
+                sino = create_sinogram(projs, 2 * cor)
                 angles = create_angles(sino, end=np.pi)
-            del projs
-            gc.collect()
             recon = np.zeros((sino.shape[0], sino.shape[2], sino.shape[2]), dtype=np.float32)
             for i in tqdm(range(sino.shape[0]), desc="Processing all slices"):
                 slice_ = apply_mask_and_reconstruct(sino[i], angles, sigma, coeff, apply_unsharp=apply_unsharp)
